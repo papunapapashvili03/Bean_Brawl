@@ -1,0 +1,33 @@
+<!-- Supabase: Authentication > Emails > "Change Email Address". Subject: Confirm your email for Fallguy -->
+<!-- Sent when a guest registers (their guest account gets this email). {{ .Token }} is the code they type in. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0e27;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#1f2547;border-radius:16px;padding:32px 28px;">
+        <tr>
+          <td style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;padding-bottom:20px;">Fallguy</td>
+        </tr>
+        <tr>
+          <td style="color:#ffffff;font-size:18px;font-weight:700;padding-bottom:8px;">
+            Keep your account{{ if .Data.username }}, {{ .Data.username }}{{ end }}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#8f97c7;font-size:14px;line-height:21px;padding-bottom:22px;">
+            Enter this code in the game to add {{ .NewEmail }} to your account:
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="background:#151938;border-radius:12px;padding:18px 0;color:#ffffff;font-size:34px;font-weight:800;letter-spacing:10px;font-family:'Courier New',Courier,monospace;">
+            {{ .Token }}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#7d84b8;font-size:12px;line-height:18px;padding-top:22px;">
+            The code works once and runs out soon. If you didn't ask for this, you can ignore this email.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

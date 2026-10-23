@@ -1,0 +1,17 @@
+{
+  "name": "fallguy-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fallguy's online play server: rooms of players, each one's moves passed on to the rest",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}
