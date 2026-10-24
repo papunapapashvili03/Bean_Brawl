@@ -144,6 +144,25 @@ function HexFloor({ x, y, r, rows, cols, top, side, missing = [] }: { x: number;
   return <g>{tiles}</g>
 }
 
+// A hexagonal pillar: a hex top like a tile's, and its side going a long way down (t), centred on (x, y)
+function HexPillar({ x, y, r, t, top, side, glow }: { x: number; y: number; r: number; t: number; top: string; side: string; glow?: string }) {
+  const h = r * 0.5
+  const pts = [0, 1, 2, 3, 4, 5].map((k) => {
+    const a = (Math.PI / 3) * k
+    return [x + r * Math.cos(a), y + h * Math.sin(a)]
+  })
+  const face = pts.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(' ')
+  const [p0, p1, p2, p3] = pts
+  const sideD = `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} L${p1[0].toFixed(1)} ${p1[1].toFixed(1)} L${p2[0].toFixed(1)} ${p2[1].toFixed(1)} L${p3[0].toFixed(1)} ${p3[1].toFixed(1)} L${p3[0].toFixed(1)} ${(p3[1] + t).toFixed(1)} L${p2[0].toFixed(1)} ${(p2[1] + t).toFixed(1)} L${p1[0].toFixed(1)} ${(p1[1] + t).toFixed(1)} L${p0[0].toFixed(1)} ${(p0[1] + t).toFixed(1)} Z`
+  return (
+    <g>
+      <path d={sideD} fill={side} />
+      <polygon points={face} fill={top} />
+      <polygon points={face} fill={glow ?? '#fff'} opacity={glow ? 0.55 : 0.16} transform={`translate(${x} ${y}) scale(0.66) translate(${-x} ${-y})`} />
+    </g>
+  )
+}
+
 // A square floor tile seen from above at a slant: a diamond (2a across, 2b deep) with its middle at (x, y),
 // and its two near sides, t deep
 type SlabLook = { top: string; left: string; right: string; o?: number }
@@ -480,6 +499,111 @@ const SCENES: Record<string, () => ReactNode> = {
         <Bean x={70} y={147} h={21} arms="up" />
         <Bean x={57} y={140} h={19} color="#4f8bff" />
         <Bean x={83} y={126} h={19} color="#36c2a0" arms="out" flip />
+      </>
+    )
+  },
+  lava: () => {
+    // Pillars at their heights over the lava, back to front; one glowing, about to sink
+    const pillars: [number, number, number, string?][] = [
+      [40, 92, 58],
+      [83, 82, 66],
+      [126, 96, 54],
+      [18, 128, 50],
+      [61, 122, 56, '#ff5a2a'],
+      [104, 118, 60],
+      [148, 132, 46],
+      [40, 160, 44],
+      [83, 152, 50],
+      [126, 166, 40],
+    ]
+    return (
+      <>
+        <Bg id="lava" stops={['#3d2466', '#b2456e', '#ff8a4a']} />
+        <circle cx={128} cy={34} r={14} fill="#ffd27a" opacity={0.85} />
+        <path d="M0 150 Q40 140 83 146 T166 140 L166 222 L0 222Z" fill="#ff6a1f" />
+        <path d="M0 150 Q40 140 83 146 T166 140" stroke="#ffe066" strokeWidth={3} fill="none" opacity={0.8} />
+        <g stroke="#ffd04a" strokeWidth={2} fill="none" opacity={0.75} strokeLinecap="round">
+          <path d="M8 180 l14 -6 l10 8 l16 -4M60 200 l12 -8 l14 6 l10 -10M112 186 l14 4 l10 -8 l20 6M20 212 l18 -6 l12 4" />
+        </g>
+        {pillars.map(([x, y, t, glow], i) => (
+          <HexPillar key={i} x={x} y={y} r={17} t={t} top={glow ? '#ff9a6c' : '#78aaf0'} side={glow ? '#c2452a' : '#4a7bd0'} glow={glow} />
+        ))}
+        <g fill="#ffb347">
+          {[
+            [24, 70, 1.6],
+            [140, 64, 1.3],
+            [70, 52, 1.2],
+            [110, 140, 1.5],
+            [150, 104, 1.2],
+            [30, 110, 1.3],
+          ].map(([cx, cy, r]) => (
+            <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} />
+          ))}
+        </g>
+        <Bean x={83} y={84} h={24} arms="up" />
+        <Bean x={104} y={118} h={20} color="#4f8bff" arms="out" flip />
+        <Bean x={40} y={94} h={19} color="#ffd23f" />
+      </>
+    )
+  },
+  over: () => (
+    <>
+      <Bg id="over" stops={['#8fd3ff', '#bfe6ff', '#e7f6ff']} />
+      <Cloud x={14} y={46} s={0.8} o={0.85} />
+      <Cloud x={118} y={84} s={0.6} o={0.7} />
+      {/* The track, going away up the card between its yellow rails */}
+      <path d="M8 222 L64 70 L102 70 L158 222Z" fill="#ff5d7e" />
+      <path d="M8 222 L64 70 L68 70 L18 222Z" fill="#ffd23f" />
+      <path d="M158 222 L102 70 L98 70 L148 222Z" fill="#ffd23f" />
+      <path d="M8 222 L64 70 L64 78 L4 222Z" fill="#7a4fd8" opacity={0.85} />
+      {/* Bars on teal posts: a gate far off, hurdles nearer */}
+      {[
+        [84, 0.92, 22],
+        [118, 0.72, 0],
+        [166, 0.44, 0],
+      ].map(([y, s, up], i) => {
+        const half = 17 + (y - 70) * 0.48
+        return (
+          <g key={i}>
+            <rect x={83 - half - 6} y={y - 12 - up} width={4} height={14 + up} fill="#1fb5a8" />
+            <rect x={83 + half + 2} y={y - 12 - up} width={4} height={14 + up} fill="#1fb5a8" />
+            <rect x={83 - half - 6} y={y - 12 - up} width={half * 2 + 12} height={Math.max(3, 6 * (1 - s) + 2)} rx={2} fill="#3ddc62" />
+          </g>
+        )
+      })}
+      <Bean x={83} y={150} h={26} arms="up" />
+      <Bean x={58} y={198} h={22} color="#4f8bff" arms="out" />
+      <Bean x={110} y={104} h={16} color="#ffd23f" tilt={-70} />
+    </>
+  ),
+  rush: () => {
+    const cell = (x: number, kind: string) => {
+      const fill = kind === 'c' ? '#ff5a4e' : kind === 't' ? '#e5382f' : '#a3a7b5'
+      const edge = kind === 'c' ? '#c4302a' : kind === 't' ? '#8c1b16' : '#7d8291'
+      return (
+        <g key={x}>
+          <rect x={x} y={70} width={15} height={34} fill={fill} stroke={edge} strokeWidth={2} />
+          {kind === 'c' && <path d={`M${x + 3} ${74} l5 9 l-2 7 l6 9`} stroke="#7a1410" strokeWidth={1.6} fill="none" />}
+          {kind === 't' && <rect x={x + 1} y={84} width={13} height={6} fill="#f5ead7" />}
+        </g>
+      )
+    }
+    const wall = 'ss_cssts_s'
+    return (
+      <>
+        <Bg id="rush" stops={['#9fd8ff', '#c9ebff', '#7ee03c']} />
+        <Cloud x={112} y={30} s={0.7} o={0.85} />
+        {/* The stage, coming towards us, slime either side */}
+        <path d="M0 160 L166 160 L166 222 L0 222Z" fill="#7ee03c" />
+        <path d="M30 104 L136 104 L160 222 L6 222Z" fill="#6c7cf0" />
+        <path d="M30 104 L136 104 L138 112 L28 112Z" fill="#7f8ef7" />
+        <path d="M30 104 L6 222 M136 104 L160 222" stroke="#ff2a3d" strokeWidth={3} />
+        <path d="M30 104 L6 222 M136 104 L160 222" stroke="#ff4a5a" strokeWidth={8} opacity={0.3} />
+        {/* The wall of blocks */}
+        {wall.split('').map((k, i) => (k === '_' ? null : cell(8 + i * 15, k)))}
+        <Bean x={53} y={112} h={20} color="#4f8bff" arms="out" />
+        <Bean x={83} y={176} h={28} arms="up" />
+        <Bean x={124} y={150} h={22} color="#ffd23f" flip />
       </>
     )
   },

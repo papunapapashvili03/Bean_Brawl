@@ -10,7 +10,8 @@ import { resumeAt, type BotView, type P3, type Route, type Waypoint } from './ro
 //
 // It heads for the points of the course's route (./route), one after another. How it gets to the next one it
 // works out for itself, a few times a second, by trying out what it could do over the next second or two
-// (run on, veer off to either side, wait, turn back; jump now or in a moment; roll) in its head, against where
+// (run on, veer off to either side, wait, turn back; jump now or in a moment; roll, or roll under something and
+// get back up) in its head, against where
 // everything on the course will be by then (./predict): a try that gets knocked about or falls off is out,
 // and of the rest it takes the one that gets it nearest where it's going. So it weaves between whatever's
 // swinging or rolling at it, waits for a gap, and jumps when (and only when) there'll be something to land on.
@@ -37,6 +38,8 @@ const TURNS = [0, 0.44, -0.44, 0.87, -0.87, 1.4, -1.4, 2.1, -2.1, Math.PI]
 const JUMP_TURNS = 5 // only the first few of those are tried with a jump
 const JUMP_DELAYS = [0, 0.15, 0.3, 0.45]
 const HOP = 0.4 // of its speed, for a short hop
+const ROLLS = [0.45, 0.7] // seconds, for a roll under something and back up
+const ROLL_JUMPS = [0.15, 0.35, 0.6] // ...and then a jump, this long after
 const NONE = 0
 const OK = 1
 const BLOCKED = 2
@@ -108,6 +111,7 @@ export class Pilot {
   private hx = 0
   private hz = 0
   private roll = false
+  private rollUntil = Infinity // when the roll it means to make is over (Infinity: it keeps on rolling)
   private jumpDue = -1
   private jumpFrames = 0
   private landing: P3 | null = null // where the jump it's planning comes down
@@ -384,9 +388,10 @@ export class Pilot {
       this.jumpFrames--
       input.jump = true
     }
-    input.crouchHeld = this.roll
-    input.crouchPressed = this.roll && !this.wasRolling
-    this.wasRolling = this.roll
+    const rolling = this.roll && now < this.rollUntil
+    input.crouchHeld = rolling
+    input.crouchPressed = rolling && !this.wasRolling
+    this.wasRolling = rolling
   }
 
   // -------------------------------------------------------------------------------------------------------
@@ -498,14 +503,15 @@ export class Pilot {
     let bx = 0
     let bz = 0
     let bJump = -1
-    let bRoll = false
+    let bRoll = 0
     let landX = 0
     let landY = 0
     let landZ = 0
     let lands = false
 
     // (`pace`: how much of its speed it runs at)
-    const attempt = (hx: number, hz: number, jumpAt: number, roll: boolean, cost: number, arrive = false, pace = 1) => {
+    // (`roll`: how long it rolls for, in seconds: 0 not at all, Infinity on and on)
+    const attempt = (hx: number, hz: number, jumpAt: number, roll: number, cost: number, arrive = false, pace = 1) => {
       this.simulate(physics, p, vel.y, grounded, floor, hx * pace, hz * pace, speed, jumpAt, roll, low, BODY + margin, arrive)
       let score: number
       // (Nothing safe? Better knocked about, later rather than sooner, than off the edge)
@@ -530,36 +536,44 @@ export class Pilot {
     }
 
     // Straight for it first: if that's safe and gets on, look no further
-    const straight = left > 0.05 ? attempt(ux, uz, -1, false, 0, true) : -Infinity
+    const straight = left > 0.05 ? attempt(ux, uz, -1, 0, 0, true) : -Infinity
     if (straight < ideal * 0.7) {
       const base = Math.atan2(uz, ux)
       for (let n = left > 0.05 ? 1 : 0; n < TURNS.length; n++) {
         const a = base + TURNS[n]
-        attempt(Math.cos(a), Math.sin(a), -1, false, Math.abs(TURNS[n]) * 0.25)
+        attempt(Math.cos(a), Math.sin(a), -1, 0, Math.abs(TURNS[n]) * 0.25)
       }
-      attempt(stayX, stayZ, -1, false, 0.05) // stay put
+      attempt(stayX, stayZ, -1, 0, 0.05) // stay put
       if (grounded) {
         // (Where it means to be already, something coming at it could come from anywhere: it can jump any way,
         // or on the spot)
         const here = left < 1.2
         for (let n = 0; n < (here ? TURNS.length : JUMP_TURNS); n++) {
           const a = base + TURNS[n]
-          for (const delay of JUMP_DELAYS) attempt(Math.cos(a), Math.sin(a), delay, false, 0.3 + (here ? 0 : Math.abs(TURNS[n]) * 0.25) + delay * 0.2, n === 0)
+          for (const delay of JUMP_DELAYS) attempt(Math.cos(a), Math.sin(a), delay, 0, 0.3 + (here ? 0 : Math.abs(TURNS[n]) * 0.25) + delay * 0.2, n === 0)
         }
         // ...or on the spot, or a short hop over whatever's coming (not to land far from where it was)
-        for (const delay of JUMP_DELAYS) attempt(stayX, stayZ, delay, false, 0.3 + delay * 0.2)
+        for (const delay of JUMP_DELAYS) attempt(stayX, stayZ, delay, 0, 0.3 + delay * 0.2)
         for (let n = 0; n < (here ? TURNS.length : JUMP_TURNS); n++) {
           const a = base + TURNS[n]
-          for (let d = 0; d < (here ? 3 : 2); d++) attempt(Math.cos(a), Math.sin(a), JUMP_DELAYS[d], false, 0.35 + JUMP_DELAYS[d] * 0.2, false, HOP)
+          for (let d = 0; d < (here ? 3 : 2); d++) attempt(Math.cos(a), Math.sin(a), JUMP_DELAYS[d], 0, 0.35 + JUMP_DELAYS[d] * 0.2, false, HOP)
         }
-        // Rolling is for getting under things
-        if (left > 0.05 && hazards[2].length + hazards[8].length + hazards[14].length > 0) attempt(ux, uz, -1, true, 0.6)
+        // Rolling is for getting under things: on and on, or just under the one in the way and back up (and
+        // then, for something to jump coming soon after, a jump)
+        if (left > 0.05 && hazards[2].length + hazards[8].length + hazards[14].length > 0) {
+          attempt(ux, uz, -1, Infinity, 0.6)
+          for (const time of ROLLS) {
+            attempt(ux, uz, -1, time, 0.6)
+            for (const after of ROLL_JUMPS) attempt(ux, uz, time + after, time, 0.7)
+          }
+        }
       }
     }
     this.waiting = best < -100
     this.hx = bx
     this.hz = bz
-    this.roll = bRoll
+    this.roll = bRoll > 0
+    this.rollUntil = now + bRoll
     this.jumpDue = bJump >= 0 ? now + bJump : -1
     this.landing = bJump >= 0 && lands ? [landX, landY, landZ] : null
   }
@@ -624,7 +638,7 @@ export class Pilot {
     hz0: number,
     speed: number,
     jumpAt: number,
-    roll: boolean,
+    roll: number,
     low: number,
     near: number, // how close its middle (or chest, or knees) can come to a hazard
     arrive: boolean,
@@ -645,7 +659,6 @@ export class Pilot {
     let toX = target[0]
     let toZ = target[2]
     let last = !via
-    const run = speed * (roll ? STANCES.roll.speed : 1)
     sim.hit = sim.fall = -1
     sim.landed = sim.hang = false
     sim.blocked = 0
@@ -658,6 +671,8 @@ export class Pilot {
         jumped = true
         fvx = fvz = 0
       }
+      const rolling = tau < roll
+      const run = speed * (rolling ? STANCES.roll.speed : 1)
       tau += dt
       let nx = x + (hx * run + fvx) * dt
       let nz = z + (hz * run + fvz) * dt
@@ -718,7 +733,7 @@ export class Pilot {
           grounded = false
           vy = 0
           fvx = fvz = 0
-          if (roll) {
+          if (rolling) {
             // (A roll that runs out of ground isn't a plan: it can't be kept up in the air)
             sim.fall = tau
             break
@@ -762,7 +777,7 @@ export class Pilot {
           sim.landed = true
         } else {
           y = ny
-          if (!roll && vy < 6 && nearEdges.length) {
+          if (!rolling && vy < 6 && nearEdges.length) {
             probe.x = x
             probe.y = y
             probe.z = z
@@ -778,7 +793,7 @@ export class Pilot {
       for (const s of hazards[k]) {
         const d = s.bound + near + 0.5
         if (Math.abs(s.x - x) > d || Math.abs(s.z - z) > d || Math.abs(s.y - y) > d + 0.5) continue
-        if (roll ? distance(s, x, y - 0.48, z) < near : distance(s, x, y + 0.42, z) < near || distance(s, x, y - 0.42, z) < near) {
+        if (rolling ? distance(s, x, y - 0.48, z) < near : distance(s, x, y + 0.42, z) < near || distance(s, x, y - 0.42, z) < near) {
           struck = true
           break
         }

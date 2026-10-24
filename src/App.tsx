@@ -17,6 +17,9 @@ import { ColorScene } from './game/color/ColorScene'
 import { JumpScene } from './game/jump/JumpScene'
 import { PanicScene } from './game/panic/PanicScene'
 import { WhirlyScene } from './game/whirly/WhirlyScene'
+import { LavaScene } from './game/lava/LavaScene'
+import { RushScene } from './game/rush/RushScene'
+import { OverScene } from './game/over/OverScene'
 import { ArenaScene } from './game/arena/ArenaScene'
 import { VillaScene } from './game/villa/VillaScene'
 import { ShowdownScene } from './game/showdown/ShowdownScene'
@@ -32,7 +35,7 @@ import { ShowDirector } from './game/ShowDirector'
 import { TouchControls } from './game/touch/TouchControls'
 import { inShow, loadShow, startShow, type Show } from './game/show'
 
-type Level = 'playground' | 'island' | 'sky' | 'tower' | 'neon' | 'gym' | 'crumble' | 'tilt' | 'hex' | 'ice' | 'color' | 'jump' | 'panic' | 'whirly' | 'arena' | 'villa' | 'suburb' | 'showdown' | 'valley'
+type Level = 'playground' | 'island' | 'sky' | 'tower' | 'neon' | 'gym' | 'crumble' | 'tilt' | 'hex' | 'ice' | 'color' | 'jump' | 'panic' | 'lava' | 'rush' | 'over' | 'whirly' | 'arena' | 'villa' | 'suburb' | 'showdown' | 'valley'
 type LevelDef = {
   label: string
   Component: ComponentType
@@ -48,6 +51,7 @@ const LEVELS: Record<Level, LevelDef> = {
   neon: { label: 'Neon', Component: NeonScene, Overlay: RaceHud },
   gym: { label: 'Jungle Gym', Component: GymScene, Overlay: RaceHud },
   whirly: { label: 'Spin Cycle', Component: WhirlyScene, Overlay: RaceHud },
+  over: { label: 'Over & Under', Component: OverScene, Overlay: RaceHud },
   crumble: { label: 'Crumbling Tower', Component: CrumbleScene, Overlay: RaceHud },
   tilt: { label: 'Tilt Town', Component: TiltScene, Overlay: RaceHud },
   hex: { label: 'Honeycomb', Component: HexScene, Overlay: RaceHud },
@@ -55,6 +59,8 @@ const LEVELS: Record<Level, LevelDef> = {
   color: { label: 'Color Call', Component: ColorScene, Overlay: RaceHud },
   jump: { label: 'Beam Sweep', Component: JumpScene, Overlay: RaceHud },
   panic: { label: 'Pattern Panic', Component: PanicScene, Overlay: RaceHud },
+  lava: { label: 'Floor is Lava', Component: LavaScene, Overlay: RaceHud },
+  rush: { label: 'Wall Rush', Component: RushScene, Overlay: RaceHud },
   arena: { label: 'Brick Fort', Component: ArenaScene, Overlay: MatchHud },
   villa: { label: 'Hillside', Component: VillaScene, Overlay: MatchHud },
   suburb: { label: 'Suburb', Component: SuburbScene, Overlay: MatchHud },

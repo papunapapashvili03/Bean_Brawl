@@ -19,6 +19,11 @@ export function setTimetabled(handle: number, entry: Timetabled | null) {
   else timetabled.delete(handle)
   changes++
 }
+// For bodies whose timetable is only a guess (a seesaw tipping under whoever's on it, a beam that changes
+// speed when it likes): whatever's been worked out from it is to be worked out again
+export function timetableChanged() {
+  changes++
+}
 
 // Kinematic bodies that stand where they are (or near enough) until they go, by handle: when each goes (match
 // clock; Infinity if it never does). Bots see these where they stand, and stop counting on one a moment

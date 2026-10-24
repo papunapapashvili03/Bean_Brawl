@@ -14,9 +14,9 @@ export type Show = { rounds: ShowRound[]; round: number; bots: ShowBot[] } // `r
 // What each round can be: races first (the first round's need room for the whole field at the start), and
 // a map made for the last round to finish
 export const ROUND_POOLS: string[][] = [
-  ['sky', 'gym', 'whirly'],
-  ['tower', 'neon', 'sky', 'gym', 'whirly'],
-  ['hex', 'ice', 'color', 'jump', 'panic', 'crumble', 'tilt'],
+  ['sky', 'gym', 'whirly', 'over'],
+  ['tower', 'neon', 'sky', 'gym', 'whirly', 'over'],
+  ['hex', 'ice', 'color', 'jump', 'panic', 'lava', 'rush', 'crumble', 'tilt'],
 ]
 export const QUOTAS: (number | null)[] = [16, 10, null]
 export const FIELD = { min: 24, max: 30 }
