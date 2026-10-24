@@ -102,7 +102,7 @@ export function ShowDirector({
   const roundName = quota === null ? 'Final' : `Round ${show.round + 1} of ${last}`
   const hud: ShowHud =
     stage === 'won'
-      ? { label: 'Final', finishNote: 'You won the show!', actions: again }
+      ? { label: 'Final', finishNote: 'You won the show!', crown: true, actions: again }
       : stage === 'out'
         ? {
             label: roundName,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from 'react'
 import { getRaceView, raceCourse, subscribeRace, type RaceView } from './race'
 import { sfx } from './sound'
+import { CrownIcon } from '../hudIcons'
 import { useTouchMode } from '../touch/touch'
 
 const formatTime = (s: number) => {
@@ -45,6 +46,7 @@ export type ShowHud = {
   finishNote?: string
   outNote?: string
   actions?: { label: string; onClick: () => void; primary?: boolean }[] // in place of Race again / Try again
+  crown?: boolean // the show won: the winner's crown on the finish card
 }
 
 function Actions({ show, onRestart, again }: { show?: ShowHud; onRestart: () => void; again: string }) {
@@ -125,6 +127,8 @@ export function RaceHud({ onRestart, show }: { onRestart: () => void; show?: Sho
 
       {view.phase === 'finished' && view.place !== null && (
         <div className="hud-finish">
+          {/* 1st place (in a show, only for winning it) wears the crown */}
+          {(show ? show.crown : view.place === 1) && <CrownIcon size={54} className="hud-crown" />}
           <div className="hud-finish-title">{show?.finishTitle ?? (typeof finishTitle === 'function' ? finishTitle() : finishTitle) ?? 'Finished'}</div>
           <div className="hud-finish-place">{ordinal(view.place)}</div>
           {view.field > 1 && !survival && <div className="hud-finish-of">of {view.field}</div>}

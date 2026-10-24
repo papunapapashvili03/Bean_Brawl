@@ -5,7 +5,7 @@ import { JUMP_VELOCITY, SPEED, type Runner, type RunnerInput } from '../runner'
 import { BEAM_HALF, LOW_Y, PILLAR, RADIUS, SECTIONS, SECTION_ANGLE, along, angleOf, mod, sectionOf } from './course'
 import { gone, highAngle, highSpin, lowAngle, lowSpin, round, warned } from './state'
 
-// A bot's mind on Jump Showdown. It knows exactly where both beams are and how fast they're turning, so it
+// A bot's mind on Beam Sweep. It knows exactly where both beams are and how fast they're turning, so it
 // knows when each will next sweep over where it's standing. It keeps crouched (under the high beam, and
 // ready), and jumps each sweep of the low one: at a moment that has it high enough all the while the beam's
 // under it, and back down before the high one comes round (or not up until it's gone by). Its timing's as

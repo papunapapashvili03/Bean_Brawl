@@ -45,7 +45,7 @@ import { BOT_STARTS, WHIRLY_ROUTE, botLane } from './route'
 import { WhirlygigStairs } from './Whirlygigs'
 import { WindmillWall } from './WindmillWall'
 
-// The Whirlygig: a race high in a pastel sky, over spinning discs, up a climbing wall, through two rows of
+// Spin Cycle: a race high in a pastel sky, over spinning discs, up a climbing wall, through two rows of
 // giant fans, over a windswept bridge, round a giant rotor, up a wall of windmills, up a stairway under three
 // whirlygigs and across a string of little spinning discs to the line (see ./course for the layout). Wide
 // enough for 30 at the start.

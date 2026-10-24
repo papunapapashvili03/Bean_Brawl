@@ -1,4 +1,5 @@
 import type { AmmoKind } from './catalog'
+import { loudness, onVolume } from '../../volume'
 
 // EXPERIMENTAL: gun (and throwable) sounds. Placeholders for now, made up on the spot with WebAudio (no sound files): each is a
 // few layers of filtered noise (the crack, the blast, the echo) and falling tones (the thump, the knock of
@@ -239,8 +240,10 @@ function getAudio(): Audio {
     limiter.ratio.value = 8
     limiter.attack.value = 0.002
     limiter.release.value = 0.15
+    // (At the game's volume: ../../volume)
     const out = ctx.createGain()
-    out.gain.value = VOLUME
+    out.gain.value = VOLUME * loudness()
+    onVolume(() => out.gain.setTargetAtTime(VOLUME * loudness(), ctx.currentTime, 0.05))
     out.connect(limiter).connect(ctx.destination)
     // Three seconds of white noise, played from a random point each time so no two shots are the same
     const noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate)

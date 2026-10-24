@@ -3,7 +3,7 @@ import type { GrabEdge } from '../grab'
 import type { Pick, RackLayout } from '../experimental/guns/GunDisplay'
 import { THROW_KINDS } from '../experimental/guns/throwables/catalog'
 
-// Block Party: a gun-fight arena on a floating island. Two bases face each other down its length (north +z,
+// Brick Fort: a gun-fight arena on a floating island. Two bases face each other down its length (north +z,
 // south -z), each a rounded lobe where its team starts behind cover: thick walls with a doorway, a hut to
 // hide in, a tall tower to climb (by handholds) for a view over the whole island, a medium tower and the
 // team's gun racks. The middle is left open, with the playground's small shapes scattered about to duck

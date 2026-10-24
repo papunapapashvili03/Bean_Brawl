@@ -1,4 +1,6 @@
-// Tiny WebAudio synth for race cues, so there are no audio files to load.
+import { loudness } from '../volume'
+
+// Tiny WebAudio synth for race cues, so there are no audio files to load. Played at the game's volume (../volume).
 // Browsers keep audio suspended until the first user gesture, so resume on the first key or click.
 let ctx: AudioContext | null = null
 
@@ -25,7 +27,7 @@ export function withVolume(volume: number, play: () => void) {
 }
 
 function tone(freq: number, duration: number, type: OscillatorType = 'sine', loud = 0.15, delay = 0, slideTo?: number) {
-  const volume = loud * scale
+  const volume = loud * scale * loudness()
   if (volume < 0.002) return
   const a = audio()
   const start = a.currentTime + delay

@@ -1,6 +1,6 @@
 import { COUNTDOWN_SECONDS, type RaceCourse } from '../race/race'
 
-// Hexagon: eight floors of hexagonal tiles, one above another, high in the sky. A tile you stand on lights
+// Honeycomb: eight floors of hexagonal tiles, one above another, high in the sky. A tile you stand on lights
 // up and drops away a moment later, so you have to keep moving; when there's nothing left under you, you
 // fall to the floor below, and through the bottom one you're out. The last one standing wins. If more than
 // one is still standing after five minutes, they all do.
@@ -140,7 +140,7 @@ export const SPECTATOR: Point = [36, 24, 30]
 
 export const HEX_COURSE: RaceCourse = {
   spawn: SPAWNS[PLAYER_SLOT],
-  sections: ['Hexagon'],
+  sections: ['Honeycomb'],
   checkpoints: [],
   // Never crossed: the round is won by being the last one standing (or still standing at the end)
   finish: { min: [1, 1, 1], max: [-1, -1, -1] },

@@ -8,7 +8,7 @@ import { Beam, Slab } from '../race/parts'
 import { sfx } from '../race/sound'
 import { COLORS, STAIRS, WHIRL, WHIRLYGIGS, stairsY } from './course'
 
-// 4. Whirlygig Stairs: a wide stairway up to the finish, purple walls either side, and two whirlygigs over
+// 4. Spinner Stairs: a wide stairway up to the finish, purple walls either side, and two whirlygigs over
 // it: long pink bars turning upright across the stairs from a yellow gantry, sweeping down to just off the
 // steps at the bottom of each turn, one off to the left and the next off to the right. Caught by one, you're
 // thrown back down the stairs.

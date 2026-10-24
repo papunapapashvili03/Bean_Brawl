@@ -25,7 +25,7 @@ import { JumpBrain } from './brain'
 import { END, JUMP_COURSE, MAX_SPIN, OUT_Y, PLAYER_SLOT, SECTIONS, SPAWNS, SPECTATOR, START_SPIN } from './course'
 import { dropped, endRound, lowSpin, resetJump, round } from './state'
 
-// Jump Showdown (see ./course): jump the low beam, duck the high one, as they turn faster and faster and the
+// Beam Sweep (see ./course): jump the low beam, duck the high one, as they turn faster and faster and the
 // platform drops away under you. Off it, you're out, and watch the rest from the island off to the side.
 // Last one standing wins; still standing when the five minutes are up, everyone left wins.
 

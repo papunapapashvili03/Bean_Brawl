@@ -1,6 +1,6 @@
 import { COUNTDOWN_SECONDS, type RaceCourse } from '../race/race'
 
-// Jump Showdown: a round platform out over the clouds, in eight sections round a pillar, and two beams
+// Beam Sweep: a round platform out over the clouds, in eight sections round a pillar, and two beams
 // turning round the pillar: a low one, just off the floor, to jump, and a high one, at head height, to duck
 // under (and not to be in the air under). They turn faster and faster, the high one sometimes closer behind
 // the low one and sometimes further; and after a while the sections start to drop away, one at a time, until
@@ -80,7 +80,7 @@ export const SPECTATOR: Point = [30, 6, 24]
 
 export const JUMP_COURSE: RaceCourse = {
   spawn: SPAWNS[PLAYER_SLOT],
-  sections: ['Jump Showdown'],
+  sections: ['Beam Sweep'],
   checkpoints: [],
   // Never crossed: the round is won by being the last one standing (or still standing at the end)
   finish: { min: [1, 1, 1], max: [-1, -1, -1] },

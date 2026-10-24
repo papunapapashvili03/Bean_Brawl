@@ -1,6 +1,6 @@
 import { COUNTDOWN_SECONDS, type RaceCourse } from '../race/race'
 
-// Thin Ice: three round floors of square ice tiles, one above another, out over the clouds. Ice cracks under
+// Crack Up: three round floors of square ice tiles, one above another, out over the clouds. Ice cracks under
 // your weight: every time you land on (or step onto) a tile it cracks a little, and standing on it cracks it
 // all the while, so a tile you stand still on is through in a second. Hop, and every hop costs it only a
 // little. Through a broken tile you drop to the floor below, and through the bottom one you're out. The last
@@ -109,7 +109,7 @@ export const SPECTATOR: Point = [32, 12, 26]
 
 export const ICE_COURSE: RaceCourse = {
   spawn: SPAWNS[PLAYER_SLOT],
-  sections: ['Thin Ice'],
+  sections: ['Crack Up'],
   checkpoints: [],
   // Never crossed: the round is won by being the last one standing (or still standing at the end)
   finish: { min: [1, 1, 1], max: [-1, -1, -1] },

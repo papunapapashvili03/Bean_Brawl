@@ -26,7 +26,7 @@ import { IceBrain } from './brain'
 import { END, ICE_COURSE, LAYERS, OUT_Y, PLAYER_SLOT, SPAWNS, SPECTATOR, layerOf } from './course'
 import { endRound, resetIce, round } from './tiles'
 
-// Thin Ice (see ./course): three floors of ice that cracks under you and gives way if you stand on it. Through
+// Crack Up (see ./course): three floors of ice that cracks under you and gives way if you stand on it. Through
 // the bottom one you're out, and watch the rest from the island off to the side. Last one standing wins;
 // still standing when the five minutes are up, everyone left wins.
 

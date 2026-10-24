@@ -239,6 +239,17 @@ export function respawnPoint(): Point {
 
 export const racers = (): readonly Racer[] => field
 
+// Where everyone stands in a level you last out (a show's final): those still in (or home) at the top
+// together, then those out, the last to go out first. A tie shares its place.
+export type Standing = { name: string; colour: string; you: boolean; place: number }
+export function standings(you: { name: string; colour: string }): Standing[] {
+  const all = [
+    ...field.map((r) => ({ name: r.name, colour: r.colour, you: false, out: r.outClock ?? Infinity })),
+    { name: you.name, colour: you.colour, you: true, out: state.eliminatedClock ?? Infinity },
+  ].sort((a, b) => b.out - a.out)
+  return all.map(({ out, ...who }) => ({ ...who, place: all.findIndex((other) => other.out === out) + 1 }))
+}
+
 // A runner joins the race (after the level has started it); `leave` takes it out again
 export function joinRace(name: string, colour: string, start: Point) {
   const racer: Racer = { name, colour, start, checkpoint: 0, finishClock: null, outClock: null, at: { x: start[0], y: start[1], z: start[2] } }

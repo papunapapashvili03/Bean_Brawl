@@ -11,7 +11,7 @@ import { Ball, Cone, Cylinder, Prism } from '../Shapes'
 import { FALL_Y, OUTLINE, PLAYER_SPAWN, RACKS, SHAPES, SPAWNS, TEAM_COLOURS } from './layout'
 import { Structures } from './Structures'
 
-// Block Party (see ./layout): a gun-fight arena on a floating island above the clouds. You start in the
+// Brick Fort (see ./layout): a gun-fight arena on a floating island above the clouds. You start in the
 // north base: pick up guns from the racks behind you (F), and climb anything with tape on its edge.
 
 const SKY = '#9fd8ff'

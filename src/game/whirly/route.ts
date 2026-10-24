@@ -27,7 +27,7 @@ import {
   stairsY,
 } from './course'
 
-// The bots' way round the Whirlygig (see ../race/bots): over the bridge; across the discs (wide of each hub,
+// The bots' way round Spin Cycle (see ../race/bots): over the bridge; across the discs (wide of each hub,
 // by way of the bits of base between them), jumping the arms as they come round; up the climbing wall hold
 // by hold (or, the ones that started in the middle, up the ramp); through the fans, timing the blades; over
 // the blower bridge plank by plank, waiting for a lull before each; on to the rotor, in to its hub and out

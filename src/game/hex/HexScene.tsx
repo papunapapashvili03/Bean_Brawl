@@ -25,7 +25,7 @@ import { HexBrain } from './brain'
 import { END, HEX_COURSE, LAYERS, OUT_Y, PLAYER_SLOT, SPAWNS, SPECTATOR, layerOf } from './course'
 import { endRound, resetTiles, round } from './tiles'
 
-// Hexagon (see ./course): eight floors of tiles that drop away once stood on. Through the bottom one you're
+// Honeycomb (see ./course): eight floors of tiles that drop away once stood on. Through the bottom one you're
 // out, and watch the rest from the island off to the side. Last one standing wins; still standing when the
 // five minutes are up, everyone left wins.
 

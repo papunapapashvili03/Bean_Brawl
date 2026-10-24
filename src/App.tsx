@@ -25,6 +25,7 @@ import { ValleyScene } from './game/valley/ValleyScene'
 import { ValleyHud } from './game/valley/ValleyHud'
 import { Wardrobe } from './game/Wardrobe'
 import { DevZoomButton, DevZoomView } from './game/DevZoomControls'
+import { GameMenu } from './game/GameMenu'
 import { MatchHud } from './game/bots/MatchHud'
 import { NetHud } from './game/net/NetHud'
 import { ShowDirector } from './game/ShowDirector'
@@ -46,28 +47,32 @@ const LEVELS: Record<Level, LevelDef> = {
   tower: { label: 'Tower', Component: TowerScene, Overlay: RaceHud },
   neon: { label: 'Neon', Component: NeonScene, Overlay: RaceHud },
   gym: { label: 'Jungle Gym', Component: GymScene, Overlay: RaceHud },
-  whirly: { label: 'The Whirlygig', Component: WhirlyScene, Overlay: RaceHud },
+  whirly: { label: 'Spin Cycle', Component: WhirlyScene, Overlay: RaceHud },
   crumble: { label: 'Crumbling Tower', Component: CrumbleScene, Overlay: RaceHud },
   tilt: { label: 'Tilt Town', Component: TiltScene, Overlay: RaceHud },
-  hex: { label: 'Hexagon', Component: HexScene, Overlay: RaceHud },
-  ice: { label: 'Thin Ice', Component: IceScene, Overlay: RaceHud },
+  hex: { label: 'Honeycomb', Component: HexScene, Overlay: RaceHud },
+  ice: { label: 'Crack Up', Component: IceScene, Overlay: RaceHud },
   color: { label: 'Color Call', Component: ColorScene, Overlay: RaceHud },
-  jump: { label: 'Jump Showdown', Component: JumpScene, Overlay: RaceHud },
+  jump: { label: 'Beam Sweep', Component: JumpScene, Overlay: RaceHud },
   panic: { label: 'Pattern Panic', Component: PanicScene, Overlay: RaceHud },
-  arena: { label: 'Block Party', Component: ArenaScene, Overlay: MatchHud },
+  arena: { label: 'Brick Fort', Component: ArenaScene, Overlay: MatchHud },
   villa: { label: 'Hillside', Component: VillaScene, Overlay: MatchHud },
   suburb: { label: 'Suburb', Component: SuburbScene, Overlay: MatchHud },
   showdown: { label: 'Neon Showdown', Component: ShowdownScene, Overlay: MatchHud },
   valley: { label: 'Dust Bowl Valley', Component: ValleyScene, Overlay: ValleyHud },
 }
 
-// Played from one of the site's modes (/games/?mode=party-games#sky): a match, not the developer's view, so
-// no level switcher or dev zoom, and a way back to the mode's page instead
+// Played from one of the site's modes (/games/?mode=party-games#sky): a match, from that mode's page
 const PLAY_MODES = ['party-games', 'shoot-out']
 const playMode = (() => {
   const mode = new URLSearchParams(window.location.search).get('mode')
   return mode && PLAY_MODES.includes(mode) ? mode : null
 })()
+// The developer's tools (the level switcher, dev zoom, the wardrobe over the game): when developing, or on
+// the live site with ?dev=1 on the address. Players never see them.
+const devTools = import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')
+// Leaving goes back to the mode's page (or, from anywhere else, the site's home)
+const leaveTo = playMode ? `/#${playMode}` : '/'
 
 // Party Games plays a show (/games/?mode=party-games&show=1#sky): three rounds, one after another (see
 // ./game/show), each level loaded in turn as the show moves on
@@ -125,23 +130,19 @@ export default function App() {
       ) : (
         Overlay && <Overlay key={`${level}-${run}`} onRestart={() => setRun((r) => r + 1)} />
       )}
-      {playMode ? (
-        <a className="leave-match" href={`/#${playMode}`}>
-          ← Leave
-        </a>
-      ) : (
-        <>
-          <div className="level-switcher">
-            {(Object.keys(LEVELS) as Level[]).map((key) => (
-              <button key={key} className={key === level ? 'active' : ''} onClick={choose(key)}>
-                {LEVELS[key].label}
-              </button>
-            ))}
-          </div>
-          <DevZoomButton />
-        </>
+      {devTools && !playMode && (
+        <div className="level-switcher">
+          {(Object.keys(LEVELS) as Level[]).map((key) => (
+            <button key={key} className={key === level ? 'active' : ''} onClick={choose(key)}>
+              {LEVELS[key].label}
+            </button>
+          ))}
+        </div>
       )}
-      <Wardrobe />
+      {devTools && <DevZoomButton />}
+      {devTools && <Wardrobe />}
+      {/* Settings: volume, the prize pool, and the way out (./game/GameMenu) */}
+      <GameMenu leaveTo={leaveTo} final={!!show && show.rounds[show.round].quota === null} />
       {/* Phones and tablets: a stick and buttons on the screen (./game/touch) */}
       <TouchControls />
     </KeyboardControls>

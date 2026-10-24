@@ -1,6 +1,6 @@
 import { COUNTDOWN_SECONDS, type RaceCourse, type Zone } from '../race/race'
 
-// The Whirlygig layout. Units are metres; runners head towards -z, high in a pastel sky over the clouds:
+// Spin Cycle's layout. Units are metres; runners head towards -z, high in a pastel sky over the clouds:
 //  1. Spinning Discs: over a narrow bridge and across seven turning discs, each with an arm sweeping round
 //     its hub to jump (faster towards the end)
 //  2. The Climb: up the ramp, or the climbing walls either side of it, to the fan deck
@@ -10,7 +10,7 @@ import { COUNTDOWN_SECONDS, type RaceCourse, type Zone } from '../race/race'
 //  5. Rotor Ride: a giant four-armed walkway turning round a red pole: on to an arm as it sweeps past, in to
 //     the hub, and out the other side
 //  6. Windmill Wall: a tall climbing wall with windmills turning in front of its holds
-//  7. Whirlygig Stairs: up a stairway under three whirlygigs, off to one side and then the other
+//  7. Spinner Stairs: up a stairway under three whirlygigs, off to one side and then the other
 //  8. Rotor Hop: across six little spinning discs, smaller and quicker one after another, up to the line
 // The sweeping things get quicker as the course goes on.
 
@@ -154,7 +154,7 @@ export const WINDMILL = { radius: 3.6, hubY: TOP_2 + 1.2, out: 0.8, sail: 0.6, t
 export const WALL_TOP = deck(-190, -198, TOP_2, HALF, TOP_2 - 8)
 
 // ---------------------------------------------------------------------------------------------------------
-// 7. Whirlygig Stairs: a stairway up to TOP_3 with three whirlygigs over it: long two-bladed bars turning
+// 7. Spinner Stairs: a stairway up to TOP_3 with three whirlygigs over it: long two-bladed bars turning
 // upright across the stairs, low enough at the bottom of their turn to sweep you off your feet, off to the
 // left, then the right, then the left, each sweeping all but the far side from it: weave round them, or time
 // it under them. Each quicker than the last.
@@ -192,7 +192,7 @@ const respawn = (y: number, z: number): Point => [0, y + 1.3, z]
 
 export const WHIRLY_COURSE: RaceCourse = {
   spawn: SPAWN,
-  sections: ['Spinning Discs', 'The Climb', 'Fan Deck', 'Blower Bridge', 'Rotor Ride', 'Windmill Wall', 'Whirlygig Stairs', 'Rotor Hop'],
+  sections: ['Spinning Discs', 'The Climb', 'Fan Deck', 'Blower Bridge', 'Rotor Ride', 'Windmill Wall', 'Spinner Stairs', 'Rotor Hop'],
   checkpoints: [
     { zone: onTop(WALL_FOOT), respawn: respawn(0, -67) },
     { zone: onTop(FAN_DECK, -72, -80), respawn: respawn(TOP_1, -75) },
