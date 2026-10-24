@@ -93,7 +93,7 @@ export function MatchHud() {
       <HitFlash hits={m.hits} />
       <Score m={m} />
       <Feed m={m} />
-      <div style={{ position: 'fixed', left: 18, bottom: 18, display: 'grid', gap: 5, pointerEvents: 'none' }}>
+      <div className="match-bars">
         <Bar value={m.shield} max={MAX_SHIELD} colors={['#6cc0ff', '#1f73e0']} />
         <Bar value={m.health} max={MAX_HEALTH} colors={['#8ef070', '#34b53a']} />
       </div>

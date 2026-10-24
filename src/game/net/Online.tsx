@@ -93,8 +93,9 @@ function poseAt(r: Remote, now: number, out: number[]) {
   if (!s.length) return null
   const t = now - r.offset - DELAY // on its clock
   const last = s[s.length - 1]
-  if (t >= last[S.stamp]) {
-    const dt = Math.min(EXTRAPOLATE, (t - last[S.stamp]) / 1000)
+  // (With only one yet, it stays there till the next comes)
+  if (t >= last[S.stamp] || s.length === 1) {
+    const dt = THREE.MathUtils.clamp((t - last[S.stamp]) / 1000, 0, EXTRAPOLATE)
     out[0] = last[S.x] + last[S.vx] * dt
     out[1] = last[S.y] + (last[S.flags] & FLAG_GROUNDED ? 0 : last[S.vy] * dt)
     out[2] = last[S.z] + last[S.vz] * dt
@@ -179,7 +180,7 @@ function RemoteBean({ id, name, colour, outfit }: { id: number; name: string; co
       <CapsuleCollider args={[0.5, 0.5]} />
       <Character motion={motion} color={colour} isPlayer={false} outfit={worn} />
       <Html center position={[0, 1.5, 0]} distanceFactor={9} zIndexRange={[3, 0]}>
-        <div className="net-name" style={{ borderBottomColor: colour }}>
+        <div className="net-name bean-name" style={{ borderBottomColor: colour }}>
           {name}
         </div>
       </Html>

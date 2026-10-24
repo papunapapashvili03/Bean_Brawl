@@ -348,7 +348,7 @@ export function GunHud({
   const inHand = active === 2 || active === 3 ? slots[active - 2] : null
   const throwable = active === 4 ? pouch.selected : null
   return (
-    <div style={{ position: 'absolute', right: 132, bottom: 16, display: 'flex', alignItems: 'flex-end', gap: 16, pointerEvents: 'none' }}>
+    <div className="gun-hud">
       {inHand !== null && (
         <AmmoReadout
           gun={GUNS[inHand]}

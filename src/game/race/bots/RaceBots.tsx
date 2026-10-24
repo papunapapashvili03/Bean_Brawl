@@ -154,6 +154,7 @@ function RaceBot({
       <Html center position={[0, 1.5, 0]} distanceFactor={9} zIndexRange={[3, 0]}>
         <div
           ref={label}
+          className="bean-name"
           style={{
             pointerEvents: 'none',
             userSelect: 'none',

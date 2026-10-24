@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
 import { useRapier } from '@react-three/rapier'
 import * as THREE from 'three'
 import { newHeld, setHeld, type Held } from '../../../held'
 import { now } from '../ammo'
 import { useAimTrigger } from '../input'
-import { pinToScreen } from '../screen'
+import { TouchFire } from '../TouchFire'
+import { ScreenOverlay } from '../ScreenOverlay'
 import { playFuse, playPin, playThrow } from '../sounds'
 import { AimArc } from './AimArc'
 import { newArcAim } from './arc'
@@ -58,6 +58,7 @@ export function Throwing({ kind }: { kind: ThrowKind }) {
   const canvas = useThree((s) => s.gl.domElement)
   const state = useRef({
     aiming: false,
+    toggled: false,
     trigger: false,
     fresh: false,
     pose: 0, // 0 carried .. 1 wound up
@@ -166,6 +167,8 @@ export function Throwing({ kind }: { kind: ThrowKind }) {
         s.thrownAt = time
         throwInHand.show = 0
         playThrow()
+        // (Wound up with the on-screen Aim button: thrown, that's done with, so the next isn't lit straight away)
+        if (s.toggled) s.toggled = s.aiming = false
       }
     }
 
@@ -210,7 +213,7 @@ export function Throwing({ kind }: { kind: ThrowKind }) {
   return (
     <>
       <AimArc aim={arc} color={MARKER_COLORS[kind]} />
-      <Html fullscreen calculatePosition={pinToScreen} zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+      <ScreenOverlay zIndexRange={[4, 0]}>
         <div
           ref={countdown}
           style={{
@@ -245,7 +248,8 @@ export function Throwing({ kind }: { kind: ThrowKind }) {
             style={{ font: "900 italic 20px 'Arial Black', 'Segoe UI Black', system-ui, sans-serif", color: '#fff', textShadow: '0 2px 0 rgba(0,0,0,0.45)', minWidth: 38 }}
           />
         </div>
-      </Html>
+        <TouchFire state={state} fireLabel="Throw" />
+      </ScreenOverlay>
     </>
   )
 }

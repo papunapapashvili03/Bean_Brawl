@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from 'react'
 import { getRaceView, raceCourse, subscribeRace, type RaceView } from './race'
 import { sfx } from './sound'
+import { useTouchMode } from '../touch/touch'
 
 const formatTime = (s: number) => {
   const m = Math.floor(s / 60)
@@ -12,6 +13,17 @@ function ordinal(n: number) {
   const v = n % 100
   return n + (suffix[(v - 20) % 10] || suffix[v] || suffix[0])
 }
+
+// The start's hint, for a touch screen: its keys swapped for the on-screen controls (../touch)
+const forTouch = (hint: string) =>
+  hint
+    .replace('WASD to run', 'Stick to run')
+    .replace('Drag or Q/E to turn the camera', 'Drag to turn the camera')
+    .replace('C to crouch', 'Roll, standing still, to crouch')
+    .replace('(C, standing still)', '(Roll, standing still)')
+    .split(' · ')
+    .filter((part) => part !== 'Space to jump')
+    .join(' · ')
 
 // Sound cues for countdown ticks, RUN and checkpoints (the finish fanfare plays with the confetti)
 function useRaceSounds(view: RaceView) {
@@ -62,6 +74,8 @@ export function RaceHud({ onRestart, show }: { onRestart: () => void; show?: Sho
   const view = useSyncExternalStore(subscribeRace, getRaceView)
   useRaceSounds(view)
   const { sections, checkpoints, finishTitle, hint, survival } = raceCourse()
+  const touch = useTouchMode()
+  const startHint = hint ?? `WASD to run · Space to jump · Drag or Q/E to turn the camera · ${checkpoints.length} checkpoints`
   const racing = view.phase === 'running' || view.phase === 'countdown'
   return (
     <div className="sky-hud">
@@ -137,7 +151,7 @@ export function RaceHud({ onRestart, show }: { onRestart: () => void; show?: Sho
 
       {view.phase === 'countdown' && (
         <div className="hud-hint">
-          {hint ?? `WASD to run · Space to jump · Drag or Q/E to turn the camera · ${checkpoints.length} checkpoints`}
+          {touch ? forTouch(startHint) : startHint}
         </div>
       )}
     </div>

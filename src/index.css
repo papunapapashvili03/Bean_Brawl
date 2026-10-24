@@ -649,3 +649,360 @@ html, body, #root {
   border-bottom: 3px solid;
   padding-bottom: 2px;
 }
+
+/* ---------- Guns: the slots and what's in your hands (bottom right; ./game/experimental/guns/hud) ---------- */
+.gun-hud {
+  position: absolute;
+  right: 132px;
+  bottom: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  pointer-events: none;
+}
+
+/* (Its layer, with the Pick button: over the reticle and a scope's dark surround) */
+.gun-hud-layer {
+  z-index: 6 !important;
+}
+
+/* Shoot Out: your shield and health (bottom left; ./game/bots/MatchHud) */
+.match-bars {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  display: grid;
+  gap: 5px;
+  pointer-events: none;
+}
+
+/* ---------- Phones and tablets (./game/touch): the on-screen controls ---------- */
+canvas {
+  touch-action: none;
+}
+
+.touch body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 7; /* over a scope's dark surround */
+  pointer-events: none;
+  font-family: system-ui, sans-serif;
+}
+
+/* Put a thumb down anywhere here and the stick comes to it (clear of the slots, bottom middle) */
+.touch-stick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: min(40%, calc(50% - 100px));
+  height: 72%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-stick {
+  position: fixed;
+  left: calc(env(safe-area-inset-left) + 92px);
+  bottom: 92px;
+  width: 116px;
+  height: 116px;
+  transform: translate(-50%, 50%);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(20, 22, 30, 0.22);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.touch-stick.held {
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  background: rgba(20, 22, 30, 0.32);
+}
+
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 50px;
+  height: 50px;
+  margin: -25px 0 0 -25px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.touch-stick:not(.held) .touch-knob {
+  transition: transform 120ms ease-out;
+}
+
+.touch-button {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(20, 22, 30, 0.38);
+  color: #fff;
+  font: 800 11px system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+.touch-button.active {
+  border-color: #ffd23f;
+  background: #ffd23f;
+  color: #1f2226;
+  text-shadow: none;
+}
+
+.touch-button.down {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1f2226;
+  text-shadow: none;
+  transform: scale(0.93);
+}
+
+/* Right thumb: Jump and Roll at the bottom, and with something in your hands, Shoot, Aim and Reload above */
+.touch-jump {
+  right: calc(env(safe-area-inset-right) + 26px);
+  bottom: 26px;
+  width: 80px;
+  height: 80px;
+  font-size: 13px;
+}
+
+.touch-roll {
+  right: calc(env(safe-area-inset-right) + 118px);
+  bottom: 16px;
+  width: 60px;
+  height: 60px;
+}
+
+.touch-shoot {
+  right: calc(env(safe-area-inset-right) + 32px);
+  bottom: 122px;
+  width: 72px;
+  height: 72px;
+  background: rgba(214, 48, 49, 0.5);
+  font-size: 12px;
+}
+
+.touch-aim {
+  right: calc(env(safe-area-inset-right) + 120px);
+  bottom: 96px;
+  width: 58px;
+  height: 58px;
+}
+
+.touch-reload {
+  right: calc(env(safe-area-inset-right) + 122px);
+  bottom: 166px;
+  width: 50px;
+  height: 50px;
+  font-size: 9px;
+}
+
+/* At a gun stand: what F or G would do there, just right of the middle (narrow enough to keep clear of
+   Aim and Shoot: a long name wraps) */
+.touch-pick {
+  left: calc(50% + 30px);
+  top: calc(50% - 22px);
+  max-width: 160px;
+  padding: 9px 16px;
+  border-radius: 22px;
+  background: rgba(20, 22, 30, 0.8);
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: center;
+}
+
+.touch-turn {
+  display: none;
+}
+
+@media (orientation: portrait) and (max-width: 600px) {
+  html.touch .gun-hud {
+    bottom: 112px; /* above Jump and Roll */
+  }
+
+  .touch-turn {
+    display: block;
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 18px;
+    border-radius: 99px;
+    background: rgba(20, 22, 30, 0.8);
+    color: #fff;
+    font: 700 13px system-ui, sans-serif;
+    white-space: nowrap;
+  }
+}
+
+/* ... and everything else made smaller, to fit round them */
+.touch .level-switcher {
+  top: 6px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
+  padding: 3px;
+  z-index: 6;
+}
+
+.touch .level-switcher::-webkit-scrollbar {
+  display: none;
+}
+
+.touch .level-switcher button {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.touch .leave-match {
+  top: 6px;
+  left: calc(env(safe-area-inset-left) + 8px);
+  bottom: auto;
+  padding: 5px 11px;
+  font-size: 11px;
+}
+
+.touch .wardrobe {
+  z-index: 8; /* its panel opens down over the stick's corner */
+  top: 42px;
+  left: calc(env(safe-area-inset-left) + 8px);
+  right: auto;
+  bottom: auto;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.touch .wardrobe-toggle {
+  padding: 5px 11px;
+  font-size: 11px;
+}
+
+.touch .wardrobe-panel {
+  width: 250px;
+  max-height: calc(100vh - 90px);
+  padding: 10px;
+  gap: 8px;
+}
+
+.touch .wardrobe-options button {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.touch .dev-zoom {
+  top: 42px;
+  left: calc(env(safe-area-inset-left) + 92px);
+  bottom: auto;
+  padding: 4px 10px;
+  font-size: 10px;
+}
+
+.touch .net-hud {
+  top: 42px;
+  right: calc(env(safe-area-inset-right) + 8px);
+  gap: 4px;
+  font-size: 11px;
+}
+
+.touch .net-pill {
+  gap: 6px;
+  padding: 4px 10px;
+}
+
+.touch .net-ping,
+.touch .net-count {
+  padding-left: 6px;
+}
+
+.touch .net-players {
+  gap: 2px;
+  max-height: 22vh;
+  overflow: hidden;
+  padding: 5px 8px;
+}
+
+.touch .net-swatch {
+  width: 8px;
+  height: 8px;
+}
+
+.touch .bean-name {
+  transform: scale(0.7);
+  transform-origin: 50% 100%;
+}
+
+.touch .gun-hud {
+  left: 50%;
+  right: auto;
+  bottom: 4px;
+  transform: translateX(-50%) scale(0.68);
+  transform-origin: 50% 100%;
+}
+
+.touch .match-bars {
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%) scale(0.8);
+  transform-origin: 50% 100%;
+}
+
+.touch .hud-bar {
+  top: 76px;
+}
+
+.touch .hud-chip {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.touch .hud-time {
+  font-size: 20px;
+}
+
+/* The start's hint, between the stick and the buttons */
+.touch .hud-hint {
+  bottom: 14px;
+  width: max-content;
+  max-width: calc(100vw - 420px);
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.touch .hud-countdown {
+  font-size: 100px;
+}
+
+.touch .hud-run {
+  font-size: 84px;
+}

@@ -9,9 +9,11 @@ import { getHeld } from './held'
 import { devZoomScale } from './devZoom'
 import { setActivePlayer, type Stance } from './playerContact'
 import { STANCES, STANCE_RATE, createRunner, damp, knockRunner, restingMotion, stepRunner, type PlayerRules, type Runner, type RunnerInput } from './runner'
+import { touch } from './touch/touch'
 
-// The player: a runner's body (./runner) told what to do by the keyboard, with the camera following it.
-// Input is relative to the camera: W runs away from it, whichever way it faces.
+// The player: a runner's body (./runner) told what to do by the keyboard (or, on a phone or tablet, the
+// on-screen controls: ./touch), with the camera following it. Input is relative to the camera: W runs away
+// from it, whichever way it faces.
 
 export type { PlayerRules }
 
@@ -30,6 +32,7 @@ const PITCH_MAX = 1.25
 const DRAG_YAW = 0.005 // radians per pixel of mouse drag
 const DRAG_PITCH = 0.004
 const KEY_TURN_SPEED = 2.2 // radians per second while Q/E is held
+const TOUCH_TURN = 1.4 // a finger dragged across the screen turns the view this much more than the mouse
 // A held item (e.g. a gun) may let the camera look further up than usual
 const pitchMin = () => Math.min(PITCH_MIN, getHeld()?.cameraPitchMin ?? PITCH_MIN)
 
@@ -45,26 +48,37 @@ const cameraDir = new THREE.Vector3()
 const CAMERA_PAD = 0.3 // how far in front of a wall the camera stops
 const input: RunnerInput = { x: 0, z: 0, jump: false, drop: false, crouchHeld: false, crouchPressed: false }
 
-// Drag anywhere on the canvas (left or right button) to orbit the camera
-function useOrbitDrag(orbit: { current: { yaw: number; pitch: number } }) {
+type Orbit = { yaw: number; pitch: number }
+
+// Turns the camera for a drag of (dx, dy) pixels
+function turn(o: Orbit, dx: number, dy: number) {
+  // Through a scope the view is magnified, so the same drag turns it proportionally less
+  const magnify = getHeld()?.cameraMagnify ?? 1
+  o.yaw -= (dx * DRAG_YAW) / magnify
+  o.pitch = THREE.MathUtils.clamp(o.pitch + (dy * DRAG_PITCH) / magnify, pitchMin(), PITCH_MAX)
+}
+
+// Drag anywhere on the canvas (left or right button, or a finger) to orbit the camera
+function useOrbitDrag(orbit: { current: Orbit }) {
   const canvas = useThree((s) => s.gl.domElement)
   useEffect(() => {
-    let dragging = false
+    // What's dragging (the mouse, or the first finger down on the view) and where it was
+    let drag: { id: number; x: number; y: number; finger: boolean } | null = null
     const down = (e: PointerEvent) => {
-      if (e.button !== 0 && e.button !== 2) return
-      dragging = true
+      if (drag || (e.button !== 0 && e.button !== 2)) return
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, finger: e.pointerType !== 'mouse' }
       canvas.setPointerCapture(e.pointerId)
     }
     const move = (e: PointerEvent) => {
-      if (!dragging) return
-      const o = orbit.current
-      // Through a scope the view is magnified, so the same drag turns it proportionally less
-      const magnify = getHeld()?.cameraMagnify ?? 1
-      o.yaw -= (e.movementX * DRAG_YAW) / magnify
-      o.pitch = THREE.MathUtils.clamp(o.pitch + (e.movementY * DRAG_PITCH) / magnify, pitchMin(), PITCH_MAX)
+      if (drag?.id !== e.pointerId) return
+      // (The mouse says how far it's moved; a finger, where it's got to)
+      if (drag.finger) turn(orbit.current, (e.clientX - drag.x) * TOUCH_TURN, (e.clientY - drag.y) * TOUCH_TURN)
+      else turn(orbit.current, e.movementX, e.movementY)
+      drag.x = e.clientX
+      drag.y = e.clientY
     }
-    const up = () => {
-      dragging = false
+    const up = (e: PointerEvent) => {
+      if (drag?.id === e.pointerId) drag = null
     }
     const noMenu = (e: Event) => e.preventDefault()
     canvas.addEventListener('pointerdown', down)
@@ -132,17 +146,26 @@ export function Player({ spawn = [0, 3, 0], rules }: { spawn?: [number, number, 
     const { forward, back, left, right, jump, drop, crouch, camLeft, camRight } = getKeys()
     const o = orbit.current
     o.yaw += (Number(camLeft) - Number(camRight)) * KEY_TURN_SPEED * delta
+    // (Turned from an on-screen button too, e.g. dragging Shoot)
+    if (touch.lookX || touch.lookY) {
+      turn(o, touch.lookX * TOUCH_TURN, touch.lookY * TOUCH_TURN)
+      touch.lookX = touch.lookY = 0
+    }
 
-    // 1, 2. The body does what the keys say (./runner)
-    direction.set(Number(right) - Number(left), 0, Number(back) - Number(forward))
-    if (direction.lengthSq() > 0) direction.normalize().applyAxisAngle(UP, o.yaw)
+    // 1, 2. The body does what the keys, or the on-screen controls, say (./runner). The stick can be pushed
+    // part way, for a walk.
+    direction.set(Number(right) - Number(left) + touch.x, 0, Number(back) - Number(forward) - touch.y)
+    const push = direction.length()
+    if (push > 1) direction.divideScalar(push)
+    if (push > 0) direction.applyAxisAngle(UP, o.yaw)
     input.x = direction.x
     input.z = direction.z
-    input.jump = jump
-    input.drop = drop
-    input.crouchHeld = crouch
-    input.crouchPressed = crouchPressed.current
+    input.jump = jump || touch.jump
+    input.drop = drop || touch.drop
+    input.crouchHeld = crouch || touch.crouchHeld
+    input.crouchPressed = crouchPressed.current || touch.crouchPressed
     crouchPressed.current = false
+    touch.crouchPressed = false
     const r = (runner.current ??= createRunner(motion))
     stepRunner(r, { rb, collider: collider.current, physics, rules, spawn, setCapsule }, input, delta)
     const ps = r.posture

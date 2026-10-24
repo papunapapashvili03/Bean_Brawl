@@ -28,6 +28,7 @@ import { DevZoomButton, DevZoomView } from './game/DevZoomControls'
 import { MatchHud } from './game/bots/MatchHud'
 import { NetHud } from './game/net/NetHud'
 import { ShowDirector } from './game/ShowDirector'
+import { TouchControls } from './game/touch/TouchControls'
 import { inShow, loadShow, startShow, type Show } from './game/show'
 
 type Level = 'playground' | 'island' | 'sky' | 'tower' | 'neon' | 'gym' | 'crumble' | 'tilt' | 'hex' | 'ice' | 'color' | 'jump' | 'panic' | 'whirly' | 'arena' | 'villa' | 'suburb' | 'showdown' | 'valley'
@@ -141,6 +142,8 @@ export default function App() {
         </>
       )}
       <Wardrobe />
+      {/* Phones and tablets: a stick and buttons on the screen (./game/touch) */}
+      <TouchControls />
     </KeyboardControls>
   )
 }

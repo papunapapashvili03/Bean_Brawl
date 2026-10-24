@@ -187,7 +187,7 @@ export function Bot({ def, spawn, spawns, nav, fallY }: { def: BotDef; spawn: P3
           </group>
         </group>
         <Html center position={[0, 1.55, 0]} distanceFactor={9} zIndexRange={[3, 0]}>
-          <div ref={label} style={labelStyle(def.colour)}>
+          <div ref={label} className="bean-name" style={labelStyle(def.colour)}>
             <span>{def.name}</span>
             <HealthBars health={bars.health} shield={bars.shield} width={96} />
           </div>

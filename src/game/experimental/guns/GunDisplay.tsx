@@ -6,6 +6,8 @@ import * as THREE from 'three'
 import { newHeld, setHeld, type Held } from '../../held'
 import { activePlayerPosition, activePlayerPosture } from '../../playerContact'
 import { BOTTOM } from '../../toon'
+import { TouchButton } from '../../touch/TouchButton'
+import { useTouchMode } from '../../touch/touch'
 import { isHeadshot, targetFor, type Target } from '../combat'
 import { ammo, now, useAmmo } from './ammo'
 import { GUNS, type Recoil } from './catalog'
@@ -17,9 +19,10 @@ import { inHand } from './inHand'
 import { useAimTrigger } from './input'
 import { offhand } from './offhand'
 import { GUN_SCALE } from './parts'
-import { pinToScreen } from './screen'
+import { ScreenOverlay } from './ScreenOverlay'
 import { castShot, rayStart } from './shots'
 import { pelletOffset } from './spread'
+import { TouchFire } from './TouchFire'
 import { playBolt, playReload, playShot } from './sounds'
 import { AimArc } from './throwables/AimArc'
 import { newArcAim } from './throwables/arc'
@@ -35,6 +38,8 @@ import { launch } from './throwables/world'
 // (which restocks it). Left mouse button shoots, right mouse button (or Z) aims, R reloads.
 // Throwables (grenade, dynamite, molotov, smoke grenade) have their own platform: F takes a full stack of
 // one, into slot 4; press 4 again to switch between the kinds you carry, G puts one back (./throwables).
+// On a phone or tablet, a button beside the middle of the screen does what F or G would at the pedestal
+// you're at, and what's in your hands gets Aim, Shoot and Reload buttons (./TouchFire); tap a slot to switch.
 // Self-contained: remove <GunDisplay /> from the playground scene and delete this folder to take it out.
 
 // The platform comes up to where the character's torso starts: the physics capsule's centre is 1 above
@@ -300,6 +305,7 @@ function Holding({ index }: { index: number }) {
   const [scoped, setScoped] = useState(false)
   const state = useRef({
     aiming: false,
+    toggled: false,
     trigger: false,
     fresh: false, // the trigger was pressed and hasn't fired yet (one shot per click, for single-shot guns)
     boltAt: -Infinity, // when the last shot of a bolt gun went
@@ -554,13 +560,14 @@ function Holding({ index }: { index: number }) {
   return (
     <>
       {fire.lob && <AimArc aim={arc} color="#ff5a4a" />}
-      <Html fullscreen calculatePosition={pinToScreen} zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+      <ScreenOverlay zIndexRange={[4, 0]}>
         {scoped && fire.scope ? (
           <ScopeView radius={Math.min(screenWidth, screenHeight) * SCOPE_SIZE} magnification={fire.scope} />
         ) : (
           <Reticle circle={circle} reload={gunReload} />
         )}
-      </Html>
+        <TouchFire state={state} onReload={() => ammo.startReload(index)} />
+      </ScreenOverlay>
     </>
   )
 }
@@ -614,50 +621,63 @@ export function GunDisplay({ racks = RACKS }: { racks?: RackLayout[] }) {
     if (nearest !== near) setNear(nearest)
   })
 
+  // F: take what's on the pedestal you're at
+  const pickUp = () => {
+    if (!nearPick) return
+    if ('throwable' in nearPick) {
+      pouch.fill(nearPick.throwable)
+      setActive(4)
+    } else if (!slots.includes(nearPick.gun)) {
+      const { slot } = pickupSlot()
+      const next: [number | null, number | null] = [...slots]
+      next[slot - 2] = nearPick.gun
+      setSlots(next)
+      setActive(slot)
+    }
+  }
+  // G: put back what's in your hands
+  const putBack = () => {
+    if (gunSlot !== null && slots[gunSlot - 2] !== null) {
+      ammo.refill(slots[gunSlot - 2]!) // back on its pedestal, restocked
+      const next: [number | null, number | null] = [...slots]
+      next[gunSlot - 2] = null
+      setSlots(next)
+    } else if (active === 4 && carried.selected) pouch.putBack(carried.selected)
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return
       if (e.code in SLOT_KEYS) select(SLOT_KEYS[e.code])
-      if (e.code === PICK_KEY && nearPick) {
-        if ('throwable' in nearPick) {
-          pouch.fill(nearPick.throwable)
-          setActive(4)
-        } else if (!slots.includes(nearPick.gun)) {
-          const { slot } = pickupSlot()
-          const next: [number | null, number | null] = [...slots]
-          next[slot - 2] = nearPick.gun
-          setSlots(next)
-          setActive(slot)
-        }
-      }
-      if (e.code === DROP_KEY) {
-        if (gunSlot !== null && slots[gunSlot - 2] !== null) {
-          ammo.refill(slots[gunSlot - 2]!) // back on its pedestal, restocked
-          const next: [number | null, number | null] = [...slots]
-          next[gunSlot - 2] = null
-          setSlots(next)
-        } else if (active === 4 && carried.selected) pouch.putBack(carried.selected)
-      }
+      if (e.code === PICK_KEY) pickUp()
+      if (e.code === DROP_KEY) putBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const prompt = (pick: Pick) => {
+  // What you can do at a pedestal (and with which key), if anything
+  const actionAt = (pick: Pick): { key: 'F' | 'G'; text: string } | null => {
     if ('throwable' in pick) {
       const kind = pick.throwable
       const { name } = THROWABLES[kind]
-      const height = THROW_FLOAT + 0.6
-      if (active === 4 && carried.selected === kind) return <Prompt keyLabel="G" text={`Put back ${name}`} height={height} />
+      if (active === 4 && carried.selected === kind) return { key: 'G', text: `Put back ${name}` }
       const count = carried.counts[kind]
-      const text = count === 0 ? `Pick up ${name}` : count < CARRY_MAX ? `Refill ${name}` : `Take out ${name}`
-      return <Prompt keyLabel="F" text={text} height={height} />
+      return { key: 'F', text: count === 0 ? `Pick up ${name}` : count < CARRY_MAX ? `Refill ${name}` : `Take out ${name}` }
     }
     const name = GUNS[pick.gun].name
-    if (pick.gun === inHand) return <Prompt keyLabel="G" text={`Put back ${name}`} />
+    if (pick.gun === inHand) return { key: 'G', text: `Put back ${name}` }
     if (owned(pick)) return null
-    return <Prompt keyLabel="F" text={pickupSlot().swap ? `Swap for ${name}` : `Pick up ${name}`} />
+    return { key: 'F', text: pickupSlot().swap ? `Swap for ${name}` : `Pick up ${name}` }
   }
+  // ... said over the pedestal, or on a touch screen, on a button to do it with
+  const touchOn = useTouchMode()
+  const prompt = (pick: Pick) => {
+    const action = actionAt(pick)
+    if (!action || touchOn) return null
+    return <Prompt keyLabel={action.key} text={action.text} height={'throwable' in pick ? THROW_FLOAT + 0.6 : undefined} />
+  }
+  const nearAction = touchOn && nearPick ? actionAt(nearPick) : null
 
   return (
     <group>
@@ -666,9 +686,14 @@ export function GunDisplay({ racks = RACKS }: { racks?: RackLayout[] }) {
       <Effects />
       <ThrowEffects />
       {/* Above the reticle and scope view (which darkens the rest of the screen) */}
-      <Html fullscreen calculatePosition={pinToScreen} zIndexRange={[6, 5]} style={{ pointerEvents: 'none' }}>
+      <ScreenOverlay zIndexRange={[6, 5]} wrapperClass="gun-hud-layer">
         <GunHud slots={slots} active={active} pouch={carried} onSelect={select} />
-      </Html>
+        {nearAction && (
+          <TouchButton className="touch-pick" onDown={nearAction.key === 'F' ? pickUp : putBack}>
+            {nearAction.text}
+          </TouchButton>
+        )}
+      </ScreenOverlay>
       {racks.map((rack, r) => (
         <Rack key={r} index={r} rack={rack} owned={owned} near={near} prompt={prompt} />
       ))}
