@@ -75,7 +75,7 @@ const guns = (list: { gun: number; x: number }[]) => list.map(({ gun, x }) => ({
 
 // The racks: where each platform stands and what sits on each pedestal, by its x along the platform. The
 // rocket launcher sweeps the widest of the first two racks, so it gets the end with extra room. The snipers
-// sweep wider still, and stand behind the spawn, about 30 m from the dummies. Beside them, the explosives:
+// sweep wider still, and stand furthest back, about 30 m from the dummies. Beside them, the explosives:
 // the throwables and the bomb launcher.
 const RACKS: RackLayout[] = [
   { x: -6.9, z: 5, items: guns([0, 1, 2, 3, 4].map((gun, i) => ({ gun, x: (i - 2) * SPACING }))) },

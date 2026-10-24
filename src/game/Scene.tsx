@@ -1,14 +1,21 @@
+import { useState } from 'react'
 import { Physics, RigidBody } from '@react-three/rapier'
 import { ParkingLot } from './cars/ParkingLot'
 import { GunDisplay } from './experimental/guns/GunDisplay'
 import { TargetDummies } from './experimental/targets/TargetDummies'
 import { HangLab } from './HangLab'
 import { Online } from './net/Online'
-import { PHYSICS_PRIORITY, Player } from './Player'
+import { PHYSICS_PRIORITY, Player, type PlayerRules } from './Player'
 import { FollowSun } from './race/RaceKit'
 import { Ball, Cone, Cylinder, Prism } from './Shapes'
+import { spawnPoint } from './spawn'
+import { SpawnPlaza } from './SpawnPlaza'
+
+// After a fall: back somewhere on the spawn plaza, away from the others
+const RULES: PlayerRules = { respawnAt: spawnPoint }
 
 export function Scene() {
+  const [start] = useState(spawnPoint)
   return (
     <>
       <color attach="background" args={['#9fd8ff']} />
@@ -16,10 +23,10 @@ export function Scene() {
       {/* The sun follows the camera so the Hang Lab at the far end gets shadows too */}
       <FollowSun offset={[8, 15, 5]} intensity={1.5} color="#ffffff" extent={24} />
       <Physics gravity={[0, -20, 0]} updatePriority={PHYSICS_PRIORITY} debug={import.meta.env.DEV}>
-        {/* Ground: fixed = never moves. Runs from behind the spawn to past the Hang Lab. */}
+        {/* Ground: fixed = never moves. Runs from the spawn plaza at the back to past the Hang Lab. */}
         <RigidBody type="fixed" friction={1}>
-          <mesh receiveShadow position={[0, -0.5, -20]}>
-            <boxGeometry args={[24, 1, 80]} />
+          <mesh receiveShadow position={[0, -0.5, -10]}>
+            <boxGeometry args={[24, 1, 100]} />
             <meshStandardMaterial color="#ff8fd8" />
           </mesh>
         </RigidBody>
@@ -40,6 +47,7 @@ export function Scene() {
         <Cone position={[2, 3, -13]} color="#b7e04a" />
         <Cone position={[6, 4, -5]} rotation={[0.6, 0, 0.4]} color="#ff9ec4" />
 
+        <SpawnPlaza />
         <HangLab />
         {/* A car park at the far end */}
         <ParkingLot />
@@ -48,7 +56,7 @@ export function Scene() {
         {/* Experimental: remove this line and src/game/experimental/targets to take the dummies out */}
         <TargetDummies />
 
-        <Player />
+        <Player spawn={start} rules={RULES} />
         {/* Everyone else here: playing online (./net) */}
         <Online room="playground" />
       </Physics>
