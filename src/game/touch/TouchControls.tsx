@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { activePlayerMotion } from '../playerContact'
-import { touch, useTouchMode } from './touch'
+import { touch, useHolding, useTouchMode } from './touch'
 import { TouchButton } from './TouchButton'
 
 // The on-screen controls for phones and tablets (in touch mode, ./touch): on the left a stick to run with
 // (put a thumb down anywhere on the lower left and it comes to it); on the right Jump, and Roll (crouch,
 // standing still), which turns into Let go while hanging from something. Dragging anywhere else turns the
 // camera (../Player). A held gun adds its own Aim, Shoot and Reload (../experimental/guns/TouchFire), and a
-// gun stand its Pick button.
+// gun stand its Pick button. The buttons' icons are in public/control-icons.
 
 const RADIUS = 52 // how far (px) the knob goes from the middle of the stick
 const DEAD = 0.12 // pushed less than this (of RADIUS) does nothing
 const FULL = 0.7 // pushed this far is a run; less, a walk
+
+// (Fetched as soon as the controls show, so switching to a gun's icons doesn't wait on them)
+const ICONS = ['jump', 'jump-gun', 'crouch', 'crouch-gun', 'shoot', 'aim', 'reload']
+function useIconsLoaded(on: boolean) {
+  useEffect(() => {
+    if (on) for (const name of ICONS) new Image().src = `/control-icons/${name}.png`
+  }, [on])
+}
 
 function Stick() {
   const base = useRef<HTMLDivElement>(null)
@@ -81,6 +89,8 @@ function useHanging() {
 export function TouchControls() {
   const on = useTouchMode()
   const hanging = useHanging()
+  const gun = useHolding() === 'gun' ? '-gun' : ''
+  useIconsLoaded(on)
   // (Nothing left held down when the controls go)
   useEffect(
     () => () => {
@@ -92,8 +102,8 @@ export function TouchControls() {
   return (
     <div className="touch-controls">
       <Stick />
-      <TouchButton className="touch-jump" onDown={() => (touch.jump = true)} onUp={() => (touch.jump = false)}>
-        Jump
+      <TouchButton className="touch-jump" label="Jump" onDown={() => (touch.jump = true)} onUp={() => (touch.jump = false)}>
+        <span className={`touch-icon icon-jump${gun}`} />
       </TouchButton>
       {hanging ? (
         <TouchButton key="drop" className="touch-roll" onDown={() => (touch.drop = true)} onUp={() => (touch.drop = false)}>
@@ -103,13 +113,14 @@ export function TouchControls() {
         <TouchButton
           key="roll"
           className="touch-roll"
+          label="Roll (standing still: crouch)"
           onDown={() => {
             touch.crouchHeld = true
             touch.crouchPressed = true
           }}
           onUp={() => (touch.crouchHeld = false)}
         >
-          Roll
+          <span className={`touch-icon icon-crouch${gun}`} />
         </TouchButton>
       )}
       <div className="touch-turn">Turn your phone sideways to play</div>

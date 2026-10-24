@@ -48,14 +48,30 @@ else if (forced !== '0') {
 
 export const touchMode = () => on
 
+const subscribe = (l: () => void) => {
+  listeners.add(l)
+  return () => {
+    listeners.delete(l)
+  }
+}
+
 export function useTouchMode() {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
-      return () => {
-        listeners.delete(l)
-      }
-    },
-    () => on,
-  )
+  return useSyncExternalStore(subscribe, () => on)
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// What's in your hands, as the controls see it (said by the gun or throwable's own buttons: ../experimental/
+// guns/TouchFire): with a gun, Jump and Roll show the bean holding one
+
+export type Holding = 'gun' | 'throwable' | null
+let holding: Holding = null
+
+export function setHolding(next: Holding) {
+  if (holding === next) return
+  holding = next
+  listeners.forEach((l) => l())
+}
+
+export function useHolding() {
+  return useSyncExternalStore(subscribe, () => holding)
 }

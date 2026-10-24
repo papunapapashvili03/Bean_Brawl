@@ -248,7 +248,7 @@ export function Throwing({ kind }: { kind: ThrowKind }) {
             style={{ font: "900 italic 20px 'Arial Black', 'Segoe UI Black', system-ui, sans-serif", color: '#fff', textShadow: '0 2px 0 rgba(0,0,0,0.45)', minWidth: 38 }}
           />
         </div>
-        <TouchFire state={state} fireLabel="Throw" />
+        <TouchFire state={state} throwable />
       </ScreenOverlay>
     </>
   )

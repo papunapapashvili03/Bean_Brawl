@@ -779,6 +779,86 @@ canvas {
   transform: scale(0.93);
 }
 
+/* Their icons (public/control-icons): the bean's on Jump and Roll, white on the button (its own grey once
+   pressed); Shoot, Aim and Reload are round icons that are the whole button. Each is sized to fill its button. */
+.touch-icon {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: center / 135% no-repeat;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+.touch-button.down .touch-icon {
+  filter: none;
+}
+
+.icon-jump {
+  background-image: url('/control-icons/jump.png');
+}
+
+.icon-crouch {
+  background-image: url('/control-icons/crouch.png');
+}
+
+.icon-jump-gun {
+  background-image: url('/control-icons/jump-gun.png');
+  background-size: 122%;
+}
+
+.icon-crouch-gun {
+  background-image: url('/control-icons/crouch-gun.png');
+  background-size: 122%;
+  background-position: 46% 50%;
+}
+
+.touch-face .touch-icon {
+  filter: none;
+}
+
+.icon-shoot {
+  background-image: url('/control-icons/shoot.png');
+  background-size: 147%;
+}
+
+.icon-reload {
+  background-image: url('/control-icons/reload.png');
+  background-size: 122%;
+}
+
+/* (Its circle runs the full width of the picture and 103..970 of its 1024 height) */
+.icon-aim {
+  background-image: url('/control-icons/aim.png');
+  background-size: auto 118%;
+  background-position: 50% 66%;
+}
+
+.touch-button.touch-face {
+  border: none;
+  background: transparent;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.touch-button.touch-aim.touch-face {
+  background: #5a5a5a; /* the icon's own, at the edges of its circle */
+}
+
+.touch-button.touch-face.down {
+  border: none;
+  background: transparent;
+  filter: brightness(1.25);
+}
+
+.touch-button.touch-aim.touch-face.down {
+  background: #5a5a5a;
+}
+
+.touch-button.touch-face.active {
+  box-shadow: 0 0 0 3px #ffd23f, 0 2px 6px rgba(0, 0, 0, 0.25);
+  filter: brightness(1.15);
+}
+
 /* Right thumb: Jump and Roll at the bottom, and with something in your hands, Shoot, Aim and Reload above */
 .touch-jump {
   right: calc(env(safe-area-inset-right) + 26px);
