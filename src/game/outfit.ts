@@ -51,6 +51,9 @@ function subscribe(listener: () => void) {
   }
 }
 
+// What's worn now (for the moment it's needed, e.g. joining a game)
+export const currentOutfit = () => outfit
+
 export function useOutfit() {
   return useSyncExternalStore(subscribe, () => outfit)
 }

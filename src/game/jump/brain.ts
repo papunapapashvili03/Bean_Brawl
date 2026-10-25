@@ -61,10 +61,10 @@ export class JumpBrain implements Steering {
   private nextSpot = 0
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, mistakes } = bot.skill
     this.speed = SPEED * bot.skill.speed
-    this.wobble = 0.03 + 0.09 * (1 - level)
-    this.misses = bot.skill.lapse > 0 ? 0.006 + 0.05 * (1 - level) ** 2 : 0.003
+    this.wobble = (0.03 + 0.09 * (1 - level)) * Math.sqrt(mistakes)
+    this.misses = (bot.skill.lapse > 0 ? 0.006 + 0.05 * (1 - level) ** 2 : 0.003) * mistakes
     this.start = bot.skill.start
     this.seed = (bot.bias + 1) * 9973
   }

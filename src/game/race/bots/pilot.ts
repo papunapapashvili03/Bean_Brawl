@@ -45,10 +45,13 @@ const OK = 1
 const BLOCKED = 2
 
 export type PilotSkill = {
-  speed: number // 0..1 of flat out
+  level: number // how good it is, 0 (slow, careless) .. 1 (quick, sharp): what the rest comes from
+  speed: number // of flat out (about 0.78..0.97, a little over or under with the difficulty preset)
   margin: number // how wide a berth it gives hazards (m)
   start: number // seconds after RUN before it gets going
   lapse: number // how long its mind wanders when it does (seconds, give or take; 0: never)
+  mistakes: number // times how often it slips up (the difficulty preset's: ../presets)
+  reaction: number // times how long it takes to react (the difficulty preset's)
 }
 
 // Scratch, shared by every pilot (one decides at a time)

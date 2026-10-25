@@ -14,6 +14,7 @@ import {
   TIDE_TIME,
 } from './course'
 import { COUNTDOWN_SECONDS } from '../race/race'
+import { roundSeedFor, shuffle } from '../roundSeed'
 
 // The round's timetable: the lava's level, and every pillar's height, at any time on the match clock. It's all
 // worked out when the round starts (different every round), so everyone (the arena, the bots) knows where
@@ -82,7 +83,7 @@ export function planPillars(seed = Math.floor(Math.random() * 1e9)) {
   const under: [number, number][] = [] // every sink for a while: from when it starts going down till it's back up
   const busy = (from: number, to: number) => under.filter(([a, b]) => a < to && b > from).length
   // (Visited in a random order, so it isn't always the same ones that get to sink)
-  const order = PILLARS.map((_, i) => i).sort(() => random() - 0.5)
+  const order = shuffle(PILLARS.map((_, i) => i), random)
   for (const i of order) {
     const plan = plans[i]
     plan.at.length = plan.y.length = plan.sinks.length = 0
@@ -197,7 +198,7 @@ export function resetLava() {
   round.at = Infinity
   round.lastStanding = false
   round.winner = null
-  planPillars()
+  planPillars(roundSeedFor('lava'))
 }
 
 export function endRound(lastStanding: boolean, winner: string | null, at: number) {

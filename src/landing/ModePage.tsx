@@ -4,8 +4,8 @@ import { SHADE_COLORS, setOutfit, useOutfit, type Outfit } from '../game/outfit'
 import { CardArt } from './art'
 import type { Account } from './auth'
 import { CharacterStage, type Facing } from './CharacterStage'
-import { FIELD, QUOTAS, ROUND_POOLS, startShow } from '../game/show'
-import { modeById, playUrl, showUrl, type Mode, type ModeId } from './data'
+import { FIELD, ONLINE_SHOW_URL, QUOTAS, ROUND_POOLS } from '../game/show'
+import { modeById, playUrl, type Mode, type ModeId } from './data'
 import { OptionIcon, SlotGlyph } from './wardrobeIcons'
 
 // A mode's page: the lobby. On the left, your bean in a spotlight, and along the foot of it the wardrobe, one
@@ -13,7 +13,8 @@ import { OptionIcon, SlotGlyph } from './wardrobeIcons'
 // everything for it, put on the moment it's clicked (and kept for every game). On the right, the mode and
 // Play, which joins a game: "Joining the Server" counts up until one's found (Cancel backs out), then it
 // loads in the games app. Party Games plays a show of three rounds (../game/show), so its side lays out the
-// rounds and the maps each can be; Shoot Out plays one map, chosen here (or a random one).
+// rounds and the maps each can be, and Play goes straight to the games app, which finds other players to
+// play it with (../game/net/party). Shoot Out plays one map, chosen here (or a random one).
 
 const RANDOM = 'random'
 const SEARCH_MIN = 2.5 // seconds a join takes, give or take
@@ -314,16 +315,12 @@ export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId;
   const chosen = mode.maps.find((m) => m.id === map) ?? null
   const party = id === 'party-games'
 
-  // Once a server's found: a new show (Party Games), or the map chosen (or a random one)
+  // Once a server's found: the map chosen (or a random one)
   const resolve = useCallback((): Target => {
     const title = (m: string) => mode.maps.find((x) => x.id === m)?.title ?? m
-    if (party) {
-      const first = startShow().rounds[0].map
-      return { label: `Round 1 · ${title(first)}`, url: showUrl(first) }
-    }
     const pickId = map === RANDOM ? mode.maps[Math.floor(Math.random() * mode.maps.length)].id : map
     return { label: title(pickId), url: playUrl(mode.id, pickId) }
-  }, [party, mode, map])
+  }, [mode, map])
   return (
     <main className="lobby">
       <div className="lobby-stage" ref={stage}>
@@ -382,13 +379,13 @@ export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId;
             <div className="lobby-play-map">{party ? `${ROUND_POOLS.length} rounds` : chosen ? chosen.title : 'Random map'}</div>
             <div className="lobby-play-note">
               {party
-                ? "A new map every round: you'll see the first when the server's found."
+                ? 'Up to 10 players: the lobby waits 30 seconds for them, and bots fill the rest of the field.'
                 : chosen
                   ? chosen.blurb
                   : `Any of the ${mode.maps.length} maps: you'll see which when the server's found.`}
             </div>
           </div>
-          <button className="play" onClick={() => setJoining(true)}>
+          <button className="play" onClick={() => (party ? window.location.assign(ONLINE_SHOW_URL) : setJoining(true))}>
             Play
           </button>
         </div>

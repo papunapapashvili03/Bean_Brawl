@@ -49,10 +49,10 @@ export class LavaBrain implements Steering {
   private others: number[] = []
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, mistakes } = bot.skill
     this.speed = SPEED * bot.skill.speed
     this.stayFor = 1 + 1.6 * level + Math.random() * 0.4
-    this.slips = 0.01 + 0.06 * (1 - level) ** 2
+    this.slips = (0.01 + 0.06 * (1 - level) ** 2) * mistakes
     this.start = bot.skill.start
     this.lapse = bot.skill.lapse
     this.seed = (bot.bias + 1) * 7919

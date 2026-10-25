@@ -53,11 +53,11 @@ export class HexBrain implements Steering {
   private others: number[] = [] // where the rest are: x, z
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, mistakes } = bot.skill
     this.speed = SPEED * bot.skill.speed
     this.leap = this.speed * AIRTIME * 0.95
     this.lead = 0.12 + 0.3 * (1 - level) * Math.random()
-    this.slips = 0.004 + 0.03 * (1 - level) ** 2
+    this.slips = (0.004 + 0.03 * (1 - level) ** 2) * mistakes
     this.start = bot.skill.start
     this.lapse = bot.skill.lapse
     this.seed = (bot.bias + 1) * 9973

@@ -1,4 +1,5 @@
 import { COUNTDOWN_SECONDS } from '../race/race'
+import { roundRandom, shuffle } from '../roundSeed'
 import { BACK_TIME, CORNERS, GONE_FOR, PALETTE, SPAN, TILES, callTime, coloursIn, lookTime, offTile, patchesIn } from './course'
 
 // The calls this round: which pattern the floor's in, which colour's been called, which tiles are down, and
@@ -92,18 +93,19 @@ function pickCall() {
   for (const c of floor.colours) count.set(c, (count.get(c) ?? 0) + 1)
   const fair = floor.inUse.filter((c) => (count.get(c) ?? 0) >= 3)
   const from = fair.length ? fair : floor.inUse
-  return from[Math.floor(Math.random() * from.length)]
+  return from[Math.floor(roundRandom('color-call', floor.n)() * from.length)]
 }
 
 // A new pattern: patches of colour round scattered seeds, more colours and smaller patches the further on
 function makePattern(n: number) {
-  const pool = PALETTE.map((_, k) => k).sort(() => Math.random() - 0.5)
+  const random = roundRandom('color-pattern', n)
+  const pool = shuffle(PALETTE.map((_, k) => k), random)
   const colours = pool.slice(0, coloursIn(n))
   const seeds = Math.min(patchesIn(n), TILES.length)
   const at: { x: number; z: number; c: number }[] = []
   const half = SPAN / 2
   for (let k = 0; k < seeds; k++) {
-    at.push({ x: (Math.random() * 2 - 1) * half, z: (Math.random() * 2 - 1) * half, c: k < colours.length ? colours[k] : colours[Math.floor(Math.random() * colours.length)] })
+    at.push({ x: (random() * 2 - 1) * half, z: (random() * 2 - 1) * half, c: k < colours.length ? colours[k] : colours[Math.floor(random() * colours.length)] })
   }
   TILES.forEach((t, i) => {
     let best = 0
@@ -116,7 +118,7 @@ function makePattern(n: number) {
       }
     }
     // (Every tile its own patch, by the end: then just any colour)
-    floor.colours[i] = seeds >= TILES.length ? colours[Math.floor(Math.random() * colours.length)] : at[best].c
+    floor.colours[i] = seeds >= TILES.length ? colours[Math.floor(random() * colours.length)] : at[best].c
   })
   floor.inUse = colours.filter((c) => floor.colours.includes(c))
 

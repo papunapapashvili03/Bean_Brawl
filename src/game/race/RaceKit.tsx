@@ -2,12 +2,26 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useAfterPhysicsStep } from '@react-three/rapier'
 import * as THREE from 'three'
-import { STEP, advanceClock, getRaceView, subscribeRace } from './race'
+import { onlineClock } from '../net/party'
+import { STEP, advanceClock, getRaceView, raceClock, subscribeRace } from './race'
 import { sfx } from './sound'
 
-// Advances the match clock one fixed step at a time, after every physics step. Place inside <Physics>.
+// Online, how far this screen's clock can drift from the round's (the same on every screen) before it's put
+// right: behind (the tab was hidden a while, or the device stalled), it jumps ahead; ahead, it waits
+const DRIFT = 0.2
+
+// Advances the match clock one fixed step at a time, after every physics step. Place inside <Physics>. In a
+// show played online (../net/party) it keeps to the round's clock: it waits at the start until everyone's
+// round starts together, and doesn't let this screen fall behind the others'.
 export function MatchClock() {
-  useAfterPhysicsStep(() => advanceClock(STEP))
+  useAfterPhysicsStep(() => {
+    const target = onlineClock()
+    if (target === null) return advanceClock(STEP)
+    if (target < 0) return
+    const off = target - (raceClock() + STEP)
+    if (off < -DRIFT) return
+    advanceClock(off > DRIFT ? STEP + off : STEP)
+  })
   return null
 }
 

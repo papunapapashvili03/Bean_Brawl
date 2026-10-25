@@ -1,40 +1,80 @@
-// Fallguy's online play server. Players join a room (for now, just "playground") over a WebSocket; each
-// sends where its bean is and what it's doing about 20 times a second, and the server passes that on to
-// everyone else in the room straight away. It also tells the room who's joined (name, colour, outfit) and
-// who's left, and answers pings (so players can see their lag). Each player is trusted with its own bean:
-// fine for trying out play together, not for anything with prizes.
+// Fallguy's online play server, over WebSockets. Two ways to play together:
+//
+// - The Playground: one room anyone can drop into. Each player sends where its bean is and what it's doing
+//   about 20 times a second, and the server passes that on to everyone else there straight away.
+// - Party Games: players queue for a show. Up to PARTY_MAX of them wait together in a lobby for LOBBY_WAIT
+//   (less, once it's full), then play the show's three rounds together, the rest of the field bots. Every
+//   player's screen works out the show (its maps, its bots) from the seed the server gives it, the same for
+//   all of them. One player, the host, runs the bots for everyone and sends where they are. The server keeps
+//   the show's timetable (when each round's clock starts, by the server's clock), is told of every finish
+//   (each player tells of its own, the host of the bots'), and decides who goes through each round: the
+//   first so many home. A player who drops out can come back (with the ticket it was given) for a while.
+//   Each player says how hard it needs the bots (its difficulty: src/game/bots/difficulty.ts), and each
+//   round the server sets the field from the players in it: the bulk of the bots as hard as the one who
+//   needs it easiest, the best few as hard as the one who needs it hardest.
+//
+// It also tells each room who's joined (name, colour, outfit) and who's left, and answers pings (with the
+// server's clock, so players can see their lag and time things by it). Each player is trusted with its own
+// bean and its own finish: fine for playing together, not for anything with prizes.
 //
 // Runs anywhere Node does: `npm start` (port 2567, or $PORT, as on Railway). GET / answers "ok", for health checks.
 
+import { randomBytes, randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.PORT) || 2567
-const ROOMS = new Set(['playground'])
+const PLAYGROUND = 'playground'
 const ROOM_SIZE = 30
 const NAME_MAX = 24
-const STATE_LENGTH = 11 // numbers in a state message (see src/game/net/protocol.ts)
+const STATE_LENGTH = 12 // numbers in a state message (see src/game/net/protocol.ts)
+const BOT_STATE = 10 // numbers for each bot in the host's bots message (after its stamp)
+const MAX_BOTS = 32
 const MAX_MESSAGES_PER_SECOND = 60
 const HEARTBEAT_MS = 10_000
+
+// Party Games. (The round numbers match the game's: src/game/show.ts and src/game/race/race.ts.)
+const PARTY_MAX = 10 // players in a show, at most
+const LOBBY_WAIT = 30_000 // ms the lobby waits for players
+const FULL_WAIT = 3_000 // and how soon it starts once it's full
+const FIRST_ROUND_IN = 4_000 // from the show starting to its first round's clock starting (loading the map)
+const QUOTAS = [16, 10, null] // how many go through each round (null: the final)
+const COUNTDOWN = 4_000
+const ROUND_CAP = 300_000 // a qualifying round closes after this, with whoever's home
+const FINAL_CAP = 360_000
+const GRACE = 700 // once the quota's home, ms to wait for word of anyone who got there first
+const BREAK = 7_000 // from a round being decided to the next one's clock starting (the break, then loading)
+const REJOIN_WITHIN = 20_000 // ms a player who's dropped out of a show can come back in
+const TICK = 250
+
 // Colours for the beans (every player sees their own bean orange, so not that)
 const COLOURS = ['#4f7dff', '#36c2a0', '#8f6bff', '#ff5c8a', '#ffd23f', '#3fb5ff', '#b7e04a', '#ff9ec4', '#7df9ff', '#c77dff', '#4dd4ac', '#e23b4e']
 // What can be worn, slot by slot (anything else is dropped)
 const OUTFIT_KEYS = ['hat', 'face', 'shades', 'back', 'flag']
 
-/** @typedef {{ id: number, ws: import('ws').WebSocket, name: string, colour: string, outfit: Record<string, string>, room: string | null, alive: boolean, window: number, count: number }} Player */
+/**
+ * @typedef {{ id: number, ws: import('ws').WebSocket, name: string, colour: string, outfit: Record<string, string>, room: string | null, party: Party | null, alive: boolean, window: number, count: number }} Player
+ * @typedef {{ id: number, p: Player | null, name: string, colour: string, outfit: Record<string, string>, ticket: string, state: 'in' | 'out', goneAt: number, away: boolean, skill: { q: number, f: number } }} Member
+ * @typedef {{ id: string, room: string, seed: number, startAt: number, started: boolean, over: boolean, members: Map<number, Member>, round: number, at: number, quota: number | null, ends: Map<string, { how: string, clock: number }>, decideAt: number | null, host: number | null, emptySince: number | null }} Party
+ */
 
-/** @type {Map<string, Map<number, Player>>} */
+/** @type {Map<string, Map<number, Player>>} who's in each room */
 const rooms = new Map()
 /** @type {Set<Player>} everyone connected, in a room or not */
 const connected = new Set()
+/** @type {Map<string, Party>} lobbies and shows, by id */
+const parties = new Map()
+/** @type {Party | null} the lobby taking players now */
+let open = null
 let nextId = 1
 
 const http = createServer((req, res) => {
   res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' })
-  const counts = [...rooms].map(([name, players]) => `${name}: ${players.size}`).join(', ')
-  res.end(`ok${counts ? ` (${counts})` : ''}\n`)
+  const playground = rooms.get(PLAYGROUND)?.size ?? 0
+  const shows = [...parties.values()].filter((p) => p.started && !p.over).length
+  res.end(`ok (playground: ${playground}, lobbies: ${parties.size - shows}, shows: ${shows})\n`)
 })
-const wss = new WebSocketServer({ server: http, maxPayload: 4096 })
+const wss = new WebSocketServer({ server: http, maxPayload: 8192 })
 
 const send = (ws, message) => {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
@@ -62,41 +102,282 @@ function cleanOutfit(outfit) {
   }
   return out
 }
-function freeColour(players) {
-  const used = new Set([...players.values()].map((p) => p.colour))
-  return COLOURS.find((c) => !used.has(c)) ?? COLOURS[players.size % COLOURS.length]
+function freeColour(taken) {
+  const used = new Set(taken)
+  return COLOURS.find((c) => !used.has(c)) ?? COLOURS[used.size % COLOURS.length]
 }
+const numbers = (d, length) => Array.isArray(d) && d.length === length && d.every((v) => typeof v === 'number' && Number.isFinite(v))
+// How hard a player needs the bots: in the qualifying rounds (q) and the final (f), 0 Easy .. 1.25 Elite
+const level = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1.25, Math.max(0, v)) : 0.5)
+const cleanSkill = (skill) => ({ q: level(skill?.q), f: level(skill?.f) })
 
-function join(p, message) {
-  const room = typeof message.room === 'string' && ROOMS.has(message.room) ? message.room : null
-  if (!room) return send(p.ws, { t: 'error', reason: 'no-such-room' })
-  if (p.room) return
+function enter(p, room) {
   let players = rooms.get(room)
   if (!players) rooms.set(room, (players = new Map()))
-  if (players.size >= ROOM_SIZE) return send(p.ws, { t: 'error', reason: 'room-full' })
-  p.room = room
-  p.name = cleanName(message.name)
-  p.outfit = cleanOutfit(message.outfit)
-  p.colour = freeColour(players)
   players.set(p.id, p)
-  send(p.ws, { t: 'welcome', id: p.id, colour: p.colour, players: [...players.values()].filter((o) => o !== p).map(describe) })
-  broadcast(room, { t: 'join', player: describe(p) }, p)
-  console.log(`${p.name} (#${p.id}) joined ${room}: ${players.size} there`)
+  p.room = room
 }
-
-function leave(p) {
+function exit(p) {
   if (!p.room) return
   const players = rooms.get(p.room)
   players?.delete(p.id)
-  broadcast(p.room, { t: 'leave', id: p.id })
-  console.log(`${p.name} (#${p.id}) left ${p.room}: ${players?.size ?? 0} there`)
   if (players && players.size === 0) rooms.delete(p.room)
   p.room = null
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// The Playground
+
+function join(p, message) {
+  if (message.room !== PLAYGROUND) return send(p.ws, { t: 'error', reason: 'no-such-room' })
+  if (p.room) return
+  const players = rooms.get(PLAYGROUND)
+  if (players && players.size >= ROOM_SIZE) return send(p.ws, { t: 'error', reason: 'room-full' })
+  p.name = cleanName(message.name)
+  p.outfit = cleanOutfit(message.outfit)
+  p.colour = freeColour(players ? [...players.values()].map((o) => o.colour) : [])
+  enter(p, PLAYGROUND)
+  send(p.ws, { t: 'welcome', id: p.id, colour: p.colour, players: [...rooms.get(PLAYGROUND).values()].filter((o) => o !== p).map(describe) })
+  broadcast(PLAYGROUND, { t: 'join', player: describe(p) }, p)
+  console.log(`${p.name} (#${p.id}) joined the playground: ${rooms.get(PLAYGROUND).size} there`)
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Party Games: the lobby
+
+const here = (party) => [...party.members.values()].filter((m) => m.p)
+
+function queue(p, message) {
+  if (p.room) return
+  p.name = cleanName(message.name)
+  p.outfit = cleanOutfit(message.outfit)
+  if (!open || open.started || open.members.size >= PARTY_MAX) {
+    const id = randomUUID()
+    open = {
+      id,
+      room: `party:${id}`,
+      seed: Math.floor(Math.random() * 2 ** 31),
+      startAt: Date.now() + LOBBY_WAIT,
+      started: false,
+      over: false,
+      members: new Map(),
+      round: 0,
+      at: 0,
+      quota: QUOTAS[0],
+      ends: new Map(),
+      decideAt: null,
+      host: null,
+      emptySince: null,
+    }
+    parties.set(id, open)
+  }
+  const party = open
+  p.colour = freeColour([...party.members.values()].map((m) => m.colour))
+  party.members.set(p.id, { id: p.id, p, name: p.name, colour: p.colour, outfit: p.outfit, ticket: randomBytes(12).toString('hex'), state: 'in', goneAt: 0, away: false, skill: cleanSkill(message.skill) })
+  p.party = party
+  enter(p, party.room)
+  if (party.members.size >= PARTY_MAX) {
+    party.startAt = Math.min(party.startAt, Date.now() + FULL_WAIT)
+    broadcast(party.room, { t: 'starts', at: party.startAt }, p)
+  }
+  send(p.ws, { t: 'lobby', id: party.id, seed: party.seed, startAt: party.startAt, max: PARTY_MAX, you: p.id, colour: p.colour, players: here(party).filter((m) => m.p !== p).map(describe) })
+  broadcast(party.room, { t: 'join', player: describe(p) }, p)
+  console.log(`${p.name} (#${p.id}) queued for a show: ${party.members.size} in its lobby`)
+}
+
+// The lobby's waited long enough (or it's full): the show starts, with everyone there
+function startShow(party) {
+  party.started = true
+  if (open === party) open = null
+  const players = here(party)
+    .sort((a, b) => a.id - b.id)
+    .map(describe)
+  for (const [id, m] of party.members) if (!m.p) party.members.delete(id)
+  party.round = 0
+  party.at = Date.now() + FIRST_ROUND_IN
+  party.quota = QUOTAS[0]
+  party.host = players[0]?.id ?? null
+  const field = fieldFor(party, 0)
+  for (const m of party.members.values()) send(m.p.ws, { t: 'show', id: party.id, seed: party.seed, at: party.at, round: 0, host: party.host, players, ticket: m.ticket, field })
+  console.log(`Show ${party.id.slice(0, 8)} started with ${players.length} player(s)`)
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Party Games: the show
+
+// A round's field: how hard its bots play, from the bulk of them (low) to the best few (high), by the
+// players still in the show
+function fieldFor(party, round) {
+  const final = QUOTAS[round] === null
+  const wants = [...party.members.values()].filter((m) => m.state === 'in').map((m) => (final ? m.skill.f : m.skill.q))
+  if (!wants.length) return { low: 0.5, high: 0.5 }
+  return { low: Math.min(...wants), high: Math.max(...wants) }
+}
+
+// The host runs the bots: whoever has been (while it's still in the show, connected, and not away: its page
+// hidden, or too slow to keep them going), or else the first in the show (by id) who is. (With everyone
+// away, whoever's connected.)
+function pickHost(party) {
+  const able = (m) => !!m && m.state === 'in' && !!m.p
+  const current = party.host === null ? undefined : party.members.get(party.host)
+  if (able(current) && !current.away) return
+  const members = [...party.members.values()].filter(able).sort((a, b) => a.id - b.id)
+  const host = (members.find((m) => !m.away) ?? (able(current) ? current : members[0]))?.id ?? null
+  if (host === party.host) return
+  party.host = host
+  broadcast(party.room, { t: 'host', id: host })
+}
+
+// Someone's round is over: home, out, or (the final) won. Each runner's told of once a round.
+function done(p, message) {
+  const party = p.party
+  if (!party?.started || party.over) return
+  const member = party.members.get(p.id)
+  if (!member || member.state !== 'in') return
+  const { how, bot } = message
+  const clock = message.clock
+  if (how !== 'finish' && how !== 'out' && how !== 'won') return
+  if (typeof clock !== 'number' || !Number.isFinite(clock) || clock < 0 || clock > 3600) return
+  if (bot !== undefined && (p.id !== party.host || typeof bot !== 'string' || bot.length > NAME_MAX)) return
+  const key = bot !== undefined ? `b:${bot}` : `p:${p.id}`
+  if (party.ends.has(key)) return
+  party.ends.set(key, { how, clock })
+  broadcast(party.room, bot !== undefined ? { t: 'done', bot, how, clock } : { t: 'done', id: p.id, how, clock }, p)
+  if (party.quota !== null) {
+    const home = [...party.ends.values()].filter((e) => e.how === 'finish').length
+    if (home >= party.quota && party.decideAt === null) party.decideAt = Date.now() + GRACE
+  } else if (bot === undefined) {
+    finalOver(party)
+  }
+}
+
+// A qualifying round's over: the first home (by their clocks) go through, the rest of the players are out
+function decide(party) {
+  const through = [...party.ends]
+    .filter(([, e]) => e.how === 'finish')
+    .sort((a, b) => a[1].clock - b[1].clock)
+    .slice(0, party.quota)
+    .map(([key]) => key)
+  const round = party.round
+  party.round++
+  party.at = Date.now() + BREAK
+  party.quota = QUOTAS[party.round] ?? null
+  party.ends.clear()
+  party.decideAt = null
+  const out = [...party.members.values()].filter((m) => m.state === 'in' && !through.includes(`p:${m.id}`))
+  for (const m of out) m.state = 'out'
+  broadcast(party.room, { t: 'result', round, through, at: party.at, field: fieldFor(party, party.round) })
+  for (const m of out) {
+    if (m.p) {
+      exit(m.p)
+      m.p.party = null
+    }
+    broadcast(party.room, { t: 'leave', id: m.id })
+  }
+  console.log(`Show ${party.id.slice(0, 8)}: round ${round + 1} decided, ${through.length} through`)
+  if (![...party.members.values()].some((m) => m.state === 'in')) return endShow(party)
+  pickHost(party)
+}
+
+// The final's over once every player still in it has said how it went for them (or been gone too long)
+function finalOver(party) {
+  const waiting = [...party.members.values()].some((m) => m.state === 'in' && !party.ends.has(`p:${m.id}`))
+  if (!waiting) endShow(party)
+}
+
+function endShow(party) {
+  if (party.over) return
+  party.over = true
+  for (const m of party.members.values()) {
+    if (!m.p) continue
+    exit(m.p)
+    m.p.party = null
+  }
+  parties.delete(party.id)
+  console.log(`Show ${party.id.slice(0, 8)} over`)
+}
+
+// Back into a show after dropping out of it (a reload, or the connection going), with the ticket it was given
+function rejoin(p, message) {
+  if (p.room) return
+  const party = typeof message.show === 'string' ? parties.get(message.show) : undefined
+  const member = party?.started && !party.over ? [...party.members.values()].find((m) => m.ticket === message.ticket) : undefined
+  if (!party || !member || member.state !== 'in') return send(p.ws, { t: 'error', reason: 'show-gone' })
+  // (Its old connection may not have been noticed as gone yet)
+  const old = member.p
+  if (old) {
+    exit(old)
+    old.party = null
+    old.ws.terminate()
+  }
+  p.id = member.id
+  p.name = member.name
+  p.colour = member.colour
+  p.outfit = member.outfit
+  p.party = party
+  member.p = p
+  member.goneAt = 0
+  member.away = false
+  enter(p, party.room)
+  const players = [...party.members.values()].filter((m) => m.state === 'in').sort((a, b) => a.id - b.id)
+  send(p.ws, { t: 'rejoined', id: p.id, colour: p.colour, round: party.round, at: party.at, host: party.host, players: players.filter((m) => m !== member && m.p).map(describe), field: fieldFor(party, party.round) })
+  broadcast(party.room, { t: 'join', player: describe(p) }, p)
+  pickHost(party)
+  console.log(`${p.name} (#${p.id}) is back in show ${party.id.slice(0, 8)}`)
+}
+
+// Gone from a lobby or a show: from a lobby, that's that; from a show, it can come back for a while (unless
+// it said it was leaving)
+function leaveParty(p, forGood) {
+  const party = p.party
+  if (!party) return
+  const member = party.members.get(p.id)
+  exit(p)
+  p.party = null
+  broadcast(party.room, { t: 'leave', id: p.id })
+  if (!member || member.p !== p) return
+  if (!party.started) {
+    party.members.delete(p.id)
+    if (party.members.size === 0) {
+      parties.delete(party.id)
+      if (open === party) open = null
+    }
+    return
+  }
+  member.p = null
+  member.goneAt = Date.now()
+  if (forGood) member.state = 'out'
+  pickHost(party)
+  if (party.quota === null) finalOver(party)
+}
+
+// Every so often: lobbies whose time is up start, rounds close, and those gone too long are out
+setInterval(() => {
+  const now = Date.now()
+  for (const party of [...parties.values()]) {
+    if (!party.started) {
+      if (now >= party.startAt) startShow(party)
+      continue
+    }
+    if (party.over) continue
+    for (const m of party.members.values()) if (m.state === 'in' && !m.p && now - m.goneAt > REJOIN_WITHIN) m.state = 'out'
+    const anyone = [...party.members.values()].some((m) => m.state === 'in')
+    if (!anyone) {
+      endShow(party)
+      continue
+    }
+    if (party.quota !== null) {
+      if ((party.decideAt !== null && now >= party.decideAt) || now >= party.at + COUNTDOWN + ROUND_CAP) decide(party)
+    } else if (now >= party.at + COUNTDOWN + FINAL_CAP) endShow(party)
+    else finalOver(party)
+  }
+}, TICK)
+
+// ---------------------------------------------------------------------------------------------------------
+
 wss.on('connection', (ws) => {
   /** @type {Player} */
-  const p = { id: nextId++, ws, name: 'Bean', colour: COLOURS[0], outfit: {}, room: null, alive: true, window: Date.now(), count: 0 }
+  const p = { id: nextId++, ws, name: 'Bean', colour: COLOURS[0], outfit: {}, room: null, party: null, alive: true, window: Date.now(), count: 0 }
   connected.add(p)
   ws.on('pong', () => (p.alive = true))
 
@@ -119,11 +400,40 @@ wss.on('connection', (ws) => {
       case 'join':
         join(p, message)
         break
-      case 's': {
+      case 'queue':
+        queue(p, message)
+        break
+      case 'rejoin':
+        rejoin(p, message)
+        break
+      case 'leave':
+        if (p.party) leaveParty(p, true)
+        break
+      case 's':
         // Where its bean is and what it's doing: passed on as it is, if it's the right shape
+        if (!p.room || !numbers(message.d, STATE_LENGTH)) return
+        broadcast(p.room, { t: 's', id: p.id, d: message.d }, p)
+        break
+      case 'b': {
+        // The bots, from the show's host: passed on likewise
         const d = message.d
-        if (!p.room || !Array.isArray(d) || d.length !== STATE_LENGTH || !d.every((v) => typeof v === 'number' && Number.isFinite(v))) return
-        broadcast(p.room, { t: 's', id: p.id, d }, p)
+        const party = p.party
+        if (!party?.started || party.host !== p.id || !Array.isArray(d)) return
+        const bots = (d.length - 1) / BOT_STATE
+        if (!Number.isInteger(bots) || bots > MAX_BOTS || !numbers(d, d.length)) return
+        broadcast(p.room, { t: 'b', id: p.id, d }, p)
+        break
+      }
+      case 'done':
+        done(p, message)
+        break
+      case 'away':
+      case 'here': {
+        // Its page hidden, or too slow to run the bots (or back to normal): someone else runs them meanwhile
+        const member = p.party?.started ? p.party.members.get(p.id) : undefined
+        if (!member || member.p !== p) return
+        member.away = message.t === 'away'
+        pickHost(p.party)
         break
       }
       case 'outfit':
@@ -138,8 +448,15 @@ wss.on('connection', (ws) => {
   })
 
   const gone = () => {
-    leave(p)
+    if (!connected.has(p)) return
     connected.delete(p)
+    if (p.party) leaveParty(p, false)
+    else if (p.room) {
+      const room = p.room
+      exit(p)
+      broadcast(room, { t: 'leave', id: p.id })
+      console.log(`${p.name} (#${p.id}) left ${room}: ${rooms.get(room)?.size ?? 0} there`)
+    }
   }
   ws.on('close', gone)
   ws.on('error', gone)

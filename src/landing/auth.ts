@@ -3,12 +3,17 @@ import type { AuthError, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
 // Accounts, through Supabase auth (./supabase), two ways in (see SUPABASE_SETUP.md for the project's side):
-// - by email, with a code: Supabase emails a one-time code (the email templates show {{ .Token }}) and
-//   entering it signs you in; registering, you pick a username too, and the account's made as the code's
-//   checked. Usernames are kept unique by the `profiles` table (supabase/setup.sql), where it exists.
+// - by email: for now with a password, and no email to confirm (Supabase's "Confirm email" switched off), so
+//   registering makes the account and signs you straight in; registering, you pick a username too. Or, with
+//   EMAIL_CODES on, with a code instead: Supabase emails a one-time code (the email templates show
+//   {{ .Token }}) and entering it signs you in (the account's made as the code's checked). Usernames are kept
+//   unique by the `profiles` table (supabase/setup.sql), where it exists.
 // - as a guest: an anonymous Supabase user with a made-up name like guest123. A guest registering keeps the
-//   account: the email's added to it (confirmed with a code the same way) along with the username.
+//   account: the email (and password) are added to it along with the username.
 // The actions resolve to an error message for the person, or null when it worked.
+
+// Emailed codes, rather than passwords: switched off for now (the code for them is all still here)
+export const EMAIL_CODES = false
 
 export type AccountKind = 'email' | 'guest'
 
@@ -31,6 +36,7 @@ export const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 export const CODE_LENGTH = 6 // Supabase's "Email OTP Length" (it can be set as long as 10)
 export const RESEND_AFTER = 60 // seconds: Supabase sends one email a minute to each address, at most
 export const NAME_MAX = 24
+export const PASSWORD_MIN = 6 // Supabase's default minimum
 
 const guestName = () => `guest${Math.floor(100 + Math.random() * 900)}`
 
@@ -74,6 +80,7 @@ export function useAuth() {
 
 const NOT_CONFIGURED = 'Accounts aren’t set up yet: add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.'
 const TAKEN = 'That username is taken.'
+const STILL_CONFIRMING = 'Your account’s made, but Supabase is still set to confirm emails first: confirm it from the email, or switch “Confirm email” off (see SUPABASE_SETUP.md).'
 
 // What went wrong, for the person. (`registering`: a database error then means the username's taken: the
 // profiles table refused it, see supabase/setup.sql.)
@@ -87,6 +94,14 @@ function explain(error: AuthError, registering = false): string {
       return 'There’s no account with that email yet. Register instead.'
     case 'otp_expired':
       return 'That code is wrong or has expired. Check it, or send a new one.'
+    case 'invalid_credentials':
+      return 'That email and password don’t match an account.'
+    case 'user_already_exists':
+      return 'That email already has an account. Sign in with it instead.'
+    case 'weak_password':
+      return `That password’s too weak: use at least ${PASSWORD_MIN} characters.`
+    case 'email_not_confirmed':
+      return 'That account’s email isn’t confirmed yet. (Switch “Confirm email” off in Supabase to skip that: see SUPABASE_SETUP.md.)'
     case 'email_exists':
       return 'That email already has an account. Sign in with it instead (this guest account won’t carry over).'
     case 'email_address_invalid':
@@ -123,6 +138,10 @@ export function checkCode(code: string) {
   return /^\d{6,10}$/.test(code) ? null : `Enter the ${CODE_LENGTH}-digit code from the email.`
 }
 
+export function checkPassword(password: string) {
+  return password.length >= PASSWORD_MIN ? null : `Passwords are at least ${PASSWORD_MIN} characters.`
+}
+
 export function checkName(name: string) {
   const n = name.trim()
   if (!n) return 'Your name can’t be empty.'
@@ -134,6 +153,39 @@ async function usernameTaken(username: string) {
   const { data, error } = await supabase!.rpc('username_taken', { name: username })
   return !error && data === true
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// With a password (for now: EMAIL_CODES off)
+
+export async function signInWithPassword(email: string, password: string) {
+  if (!supabase) return NOT_CONFIGURED
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  return error ? explain(error) : null
+}
+
+// Registering: the account's made and you're signed in, there and then (with "Confirm email" off). A guest
+// registering keeps their account: the email, password and username are added to it.
+export async function registerWithPassword(username: string, email: string, password: string) {
+  if (!supabase) return NOT_CONFIGURED
+  if (await usernameTaken(username)) return TAKEN
+  const data = { username, display_name: username }
+  const { data: current } = await supabase.auth.getSession()
+  if (current.session?.user.is_anonymous) {
+    const { data: updated, error } = await supabase.auth.updateUser({ email, password, data })
+    if (error) return explain(error, true)
+    if (updated.user?.email !== email) return STILL_CONFIRMING
+    return null
+  }
+  const { data: made, error } = await supabase.auth.signUp({ email, password, options: { data } })
+  if (error) return explain(error, true)
+  // (With "Confirm email" still on there's no session yet, and for an email that already has an account
+  // Supabase says nothing either, to not give away who's registered)
+  if (!made.session) return made.user?.identities?.length === 0 ? 'That email already has an account. Sign in with it instead.' : STILL_CONFIRMING
+  return null
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// With a code by email (EMAIL_CODES on)
 
 // Signing in: a code to the email, if there's an account with it
 export async function sendSignInCode(email: string) {

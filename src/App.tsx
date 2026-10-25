@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { KeyboardControls } from '@react-three/drei'
-import { Suspense, useCallback, useState, type ComponentType, type MouseEvent } from 'react'
+import { Suspense, useCallback, useEffect, useState, type ComponentType, type MouseEvent } from 'react'
 import { keyMap } from './game/controls'
 import { Scene } from './game/Scene'
 import { IslandScene } from './game/island/IslandScene'
@@ -32,8 +32,14 @@ import { GameMenu } from './game/GameMenu'
 import { MatchHud } from './game/bots/MatchHud'
 import { NetHud } from './game/net/NetHud'
 import { ShowDirector } from './game/ShowDirector'
+import { OnlineShowDirector, PartyLobby } from './game/net/OnlineShow'
+import { joinParty, playing, useParty } from './game/net/party'
+import { seeded } from './game/roundSeed'
 import { TouchControls } from './game/touch/TouchControls'
-import { inShow, loadShow, startShow, type Show } from './game/show'
+import { useBotPresetsReady } from './game/bots/presets'
+import { useSkillReady } from './game/bots/difficulty'
+import { firstMapOf, inShow, loadShow, startShow, type Show } from './game/show'
+import { recordMatches } from './game/record'
 
 type Level = 'playground' | 'island' | 'sky' | 'tower' | 'neon' | 'gym' | 'crumble' | 'tilt' | 'hex' | 'ice' | 'color' | 'jump' | 'panic' | 'lava' | 'rush' | 'over' | 'whirly' | 'arena' | 'villa' | 'suburb' | 'showdown' | 'valley'
 type LevelDef = {
@@ -81,14 +87,19 @@ const devTools = import.meta.env.DEV || new URLSearchParams(window.location.sear
 const leaveTo = playMode ? `/#${playMode}` : '/'
 
 // Party Games plays a show (/games/?mode=party-games&show=1#sky): three rounds, one after another (see
-// ./game/show), each level loaded in turn as the show moves on
+// ./game/show), each level loaded in turn as the show moves on. With &online=1, with other players (up to 10
+// of them: ./game/net/party): it waits for them in a lobby first, its first map loading behind it, and the
+// server starts the show and runs it.
 const showMode = playMode === 'party-games' && inShow()
+const onlineMode = showMode && new URLSearchParams(window.location.search).has('online')
 const mapOf = (show: Show) => show.rounds[show.round].map as Level
 // (Its round's map in the address too: the bots go by it)
 const atRound = (show: Show) => window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${mapOf(show)}`)
 function firstShow(): Show | null {
-  if (!showMode) return null
-  const show = loadShow() ?? startShow()
+  if (!showMode || onlineMode) return null
+  // (Not one left over in the tab from playing online)
+  const kept = loadShow()
+  const show = kept && !kept.humans ? kept : startShow()
   atRound(show)
   return show
 }
@@ -100,11 +111,24 @@ const initialLevel = (show: Show | null): Level => {
 }
 
 export default function App() {
-  const [show, setShow] = useState<Show | null>(firstShow)
-  const [level, setLevel] = useState<Level>(() => initialLevel(show))
+  const [offline, setShow] = useState<Show | null>(firstShow)
+  const [chosen, setLevel] = useState<Level>(() => initialLevel(offline))
   // Bumped to remount the current level from scratch (a fresh match)
   const [run, setRun] = useState(0)
+  // Online: the show, once the server's started it (and moved on by its director), and before that, the
+  // lobby's first map (or, till that's known, none)
+  const online = useParty()
+  // (How hard the bots play goes by the player's rating: wait for it, to make the bots, or to queue with it)
+  const rated = useSkillReady()
+  useEffect(() => (onlineMode && rated ? joinParty() : undefined), [rated])
+  const show = onlineMode ? online.show : offline
+  const waitingOn = onlineMode && !show && online.seed !== null ? (firstMapOf(seeded(online.seed)) as Level) : null
+  const level = onlineMode ? (show ? mapOf(show) : (waitingOn ?? chosen)) : chosen
+  const scene = !onlineMode || !!show || !!waitingOn
   const { Component, Overlay } = LEVELS[level]
+  const key = `${level}-${run}-${show?.id ?? ''}-${show?.round ?? ''}`
+  // (The bots are made as a level starts: it waits till their difficulty presets are in)
+  const botsReady = useBotPresetsReady() && rated
 
   // On to a show's next round (or a new show's first): its map, with the hash to match (the bots read it)
   const playRound = useCallback((next: Show) => {
@@ -115,6 +139,8 @@ export default function App() {
   }, [])
   const toLobby = useCallback(() => window.location.assign(`/#${playMode}`), [])
   const title = useCallback((map: string) => LEVELS[map as Level]?.label ?? map, [])
+  // Shoot Out: each match kept as it's won, for the account page (a show keeps its rounds: ShowDirector)
+  useEffect(() => (playMode === 'shoot-out' ? recordMatches(level) : undefined), [level])
 
   const choose = (next: Level) => (e: MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.blur()
@@ -127,15 +153,20 @@ export default function App() {
     <KeyboardControls map={keyMap}>
       <Canvas shadows camera={{ position: [0, 6, 10], fov: 50 }}>
         <Suspense fallback={null}>
-          <Component key={`${level}-${run}`} />
+          {botsReady && scene && <Component key={key} />}
         </Suspense>
         <DevZoomView />
       </Canvas>
       {show ? (
-        <ShowDirector key={`${level}-${run}`} show={show} title={title} onRound={playRound} onLobby={toLobby} />
+        onlineMode ? (
+          <OnlineShowDirector key={key} show={show} title={title} onRound={playing} onLobby={toLobby} />
+        ) : (
+          <ShowDirector key={key} show={show} title={title} onRound={playRound} onLobby={toLobby} />
+        )
       ) : (
-        Overlay && <Overlay key={`${level}-${run}`} onRestart={() => setRun((r) => r + 1)} />
+        !onlineMode && Overlay && <Overlay key={key} onRestart={() => setRun((r) => r + 1)} />
       )}
+      {onlineMode && <PartyLobby onLobby={toLobby} />}
       {devTools && !playMode && (
         <div className="level-switcher">
           {(Object.keys(LEVELS) as Level[]).map((key) => (

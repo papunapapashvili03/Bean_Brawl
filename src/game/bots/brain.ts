@@ -5,10 +5,12 @@ import { isHeadshot, targetFor, type Shooter, type Target } from '../experimenta
 import { GUNS } from '../experimental/guns/catalog'
 import { addPuff, addTracer } from '../experimental/guns/fx'
 import { playShot } from '../experimental/guns/sounds'
+import { shooterPreset } from './difficulty'
+import { within } from './presets'
 import { pelletOffset } from '../experimental/guns/spread'
 import type { Held } from '../held'
 import { activePlayerPosition } from '../playerContact'
-import { combatants, MAX_HEALTH, MAX_SHIELD, now, type Combatant } from './match'
+import { combatants, MAX_HEALTH, MAX_SHIELD, now, playerTeam, type Combatant } from './match'
 import type { NavGrid } from './nav'
 
 // What a bot thinks and does, every frame: look round for enemies (anyone on the other side it can see, in
@@ -23,7 +25,7 @@ export type BotDef = {
   team: string
   colour: string
   gun: number
-  skill: number // 0.6 (slow, wild) .. 1 (quick, steady)
+  rank: number // 0..1: where it stands among the bots (its skill's that far up the difficulty's range)
   home: [number, number] // its side's start
   away: [number, number] // the other side's start
 }
@@ -105,6 +107,18 @@ export class Brain {
   at = new THREE.Vector3() // where it was last frame
   private right = new THREE.Vector3()
   private left = new THREE.Vector3()
+
+  // How good it is, 0.6 (slow, wild) .. 1 (quick, steady), and how long it takes to react over and above
+  // that: by the difficulty its side plays at this match (./difficulty)
+  private get preset() {
+    return shooterPreset(this.def.team === playerTeam())
+  }
+  private get skill() {
+    return within(this.preset.shooterSkill, this.def.rank)
+  }
+  private get reaction() {
+    return this.preset.reaction
+  }
 
   constructor(def: BotDef, held: Held) {
     this.def = def
@@ -305,7 +319,7 @@ export class Brain {
       }
     }
     if (best) {
-      if (best !== this.enemy || !this.seen) this.reactAt = t + (0.3 + Math.random() * 0.35) / this.def.skill
+      if (best !== this.enemy || !this.seen) this.reactAt = t + ((0.3 + Math.random() * 0.35) / this.skill) * this.reaction
       this.enemy = best
       this.seen = true
       const q = best.position()
@@ -382,7 +396,7 @@ export class Brain {
     const e = this.enemy!.position()
     eye.set(pos.x, pos.y + EYE, pos.z)
     aimAt.set(e.x, e.y + 0.1 + Math.random() * 0.45, e.z)
-    const spread = (0.02 + (moving ? 0.015 : 0)) / this.def.skill
+    const spread = (0.02 + (moving ? 0.015 : 0)) / this.skill
     dir.subVectors(aimAt, eye).normalize()
     side.crossVectors(dir, UP).normalize()
     upish.crossVectors(side, dir)

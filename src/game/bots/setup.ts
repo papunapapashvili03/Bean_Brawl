@@ -26,7 +26,8 @@ const middle = (points: [number, number, number][]): [number, number] => [
   points.reduce((s, p) => s + p[2], 0) / points.length,
 ]
 
-// The bots for a map: their names, guns and how good they are (the same each time for a map)
+// The bots for a map: their names, guns and where each stands among the bots (`rank`: how good it is, within
+// the difficulty it plays at: see ./brain), the same each time for a map
 export function botDefs(setup: BotsSetup): BotDef[] {
   const rand = seeded(hash(setup.id))
   const names = [...NAMES].sort(() => rand() - 0.5)
@@ -40,7 +41,7 @@ export function botDefs(setup: BotsSetup): BotDef[] {
         team: team.id,
         colour: team.colour,
         gun: BOT_GUNS[Math.floor(rand() * BOT_GUNS.length)],
-        skill: 0.65 + rand() * 0.35,
+        rank: rand(),
         home: middle(team.spawns),
         away: middle(other.spawns),
       })

@@ -49,9 +49,9 @@ export class PanicBrain implements Steering {
   private lapseUntil = 0
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, reaction } = bot.skill
     this.speed = SPEED * bot.skill.speed
-    this.reaction = 0.15 + 0.35 * (1 - level)
+    this.reaction = (0.15 + 0.35 * (1 - level)) * reaction
     this.start = bot.skill.start
     this.lapse = bot.skill.lapse
     this.seed = (bot.bias + 1) * 9973

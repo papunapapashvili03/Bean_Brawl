@@ -1,4 +1,5 @@
 import { BETWEEN, FIRST_WAVE, GONE, GRID, TILES, warnTime } from './course'
+import { roundRandom, shuffle } from '../roundSeed'
 
 // The strikes this round: every wave's, each a set of tiles that light up at `warnAt` and drop at `at` (for
 // GONE: down, then coming back up). Waves are made one at a time, as the last one's finishing. Shared by the
@@ -56,10 +57,12 @@ export function endRound(lastStanding: boolean, winner: string | null) {
 
 // ---------------------------------------------------------------------------------------------------------
 
-const rand = (n: number) => Math.floor(Math.random() * n)
+// (Each wave's own numbers: see ../roundSeed)
+let random = Math.random
+const rand = (n: number) => Math.floor(random() * n)
 const pick = <T>(from: T[]) => from[rand(from.length)]
 const where = (test: (i: number, j: number) => boolean) => TILES.flatMap((t, k) => (test(t.i, t.j) ? [k] : []))
-const shuffled = (n: number) => Array.from({ length: n }, (_, k) => k).sort(() => Math.random() - 0.5)
+const shuffled = (n: number) => shuffle(Array.from({ length: n }, (_, k) => k), random)
 // Between the two halves of a two-part wave: the first half's back up a moment before the second drops,
 // long enough to get from one to the other (less long as it goes on)
 const again = (n: number) => GONE + Math.max(0.85, 1.1 - 0.02 * n)
@@ -160,13 +163,14 @@ function partsOf(kind: Kind, n: number): Part[] {
     }
     case 'scatter': {
       const share = Math.min(0.6, 0.3 + 0.02 * n)
-      return [{ tiles: TILES.flatMap((_, k) => (Math.random() < share ? [k] : [])), after: 0 }]
+      return [{ tiles: TILES.flatMap((_, k) => (random() < share ? [k] : [])), after: 0 }]
     }
   }
 }
 
 function makeWave(start: number) {
   const n = waves.n++
+  random = roundRandom('panic', n)
   const kind = kindFor(n, waves.kind)
   const warn = warnTime(n)
   let last = start

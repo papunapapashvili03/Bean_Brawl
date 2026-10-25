@@ -36,11 +36,11 @@ export class ColorBrain implements Steering {
   private others: number[] = [] // where the rest are: x, z
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, mistakes, reaction } = bot.skill
     this.speed = SPEED * bot.skill.speed
-    this.reaction = 0.13 + 0.3 * (1 - level)
+    this.reaction = (0.13 + 0.3 * (1 - level)) * reaction
     this.places = Math.max(0, Math.min(1, 1.3 * level - 0.1))
-    this.wrongs = 0.02 + 0.12 * (1 - level) ** 2
+    this.wrongs = (0.02 + 0.12 * (1 - level) ** 2) * mistakes
     this.start = bot.skill.start
     this.lapse = bot.skill.lapse
     this.seed = (bot.bias + 1) * 9973

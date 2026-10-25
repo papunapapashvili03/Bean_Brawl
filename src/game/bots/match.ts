@@ -1,11 +1,13 @@
 import { useSyncExternalStore } from 'react'
 import type { Shooter, Target } from '../experimental/combat'
 import type { Vec3 } from '../playerContact'
+import { tuneShooters } from './difficulty'
 
 // A team gunfight: two sides, the player on one with bots filling both. Eliminations score for the side that
 // made them; the first side to SCORE_TO_WIN wins the round, and after a moment the score starts again. The
 // player has shield and health like everyone else: eliminated, it waits a few seconds and comes back at its
-// side's start. The HUD (./MatchHud) shows all this; the bots (./Bots) play it.
+// side's start. The HUD (./MatchHud) shows all this; the bots (./Bots) play it. How the player did in each
+// round (its takedowns, and how often it was taken down) is told as the round's won (see ../record).
 
 export type P3 = [number, number, number]
 export type TeamSetup = { id: string; name: string; colour: string; spawns: P3[] }
@@ -59,7 +61,32 @@ const state = {
   winner: null as string | null,
   winnerAt: 0,
   ready: false,
+  // The player's round so far
+  kills: 0,
+  deaths: 0,
+  roundStart: 0,
 }
+
+// Told as each round's won: who by, the score, and how the player did in it
+export type MatchResult = { winner: string; playerTeam: string; score: Record<string, number>; kills: number; deaths: number; seconds: number }
+const wonListeners = new Set<(result: MatchResult) => void>()
+export function onMatchWon(listener: (result: MatchResult) => void) {
+  wonListeners.add(listener)
+  return () => {
+    wonListeners.delete(listener)
+  }
+}
+
+function newRound() {
+  state.score = Object.fromEntries(state.teams.map((t) => [t.id, 0]))
+  state.kills = state.deaths = 0
+  state.roundStart = now()
+  // (How hard the bots play this round: by how the player's been doing, ./difficulty)
+  tuneShooters()
+}
+
+// The player's round so far (for leaving part way: see ../record)
+export const roundSoFar = () => ({ kills: state.kills, deaths: state.deaths, seconds: now() - state.roundStart, score: state.score, playerTeam: state.playerTeam, over: state.winner !== null })
 
 const listeners = new Set<() => void>()
 let view = computeView()
@@ -92,7 +119,7 @@ function publish() {
 export function startMatch(teams: TeamSetup[], playerTeam: string) {
   state.teams = teams
   state.playerTeam = playerTeam
-  state.score = Object.fromEntries(teams.map((t) => [t.id, 0]))
+  newRound()
   state.feed = []
   state.health = MAX_HEALTH
   state.shield = MAX_SHIELD
@@ -149,11 +176,17 @@ export function respawnPlayer() {
 
 // Someone eliminated: a point to the killer's side (none for knocking out your own side, or falling off)
 export function recordKill(killer: Shooter | null, victim: Shooter, headshot: boolean) {
+  if (state.winner === null) {
+    if (killer?.name === PLAYER_NAME && killer.team !== victim.team) state.kills++
+    if (victim.name === PLAYER_NAME) state.deaths++
+  }
   if (killer && killer.team !== victim.team && state.winner === null) {
     state.score = { ...state.score, [killer.team]: (state.score[killer.team] ?? 0) + 1 }
     if (state.score[killer.team] >= SCORE_TO_WIN) {
       state.winner = killer.team
       state.winnerAt = now()
+      const result = { winner: killer.team, playerTeam: state.playerTeam, score: state.score, kills: state.kills, deaths: state.deaths, seconds: now() - state.roundStart }
+      wonListeners.forEach((l) => l(result))
     }
   }
   const self = killer?.name === victim.name
@@ -178,7 +211,7 @@ export function updateMatch() {
   if (state.feed.length && state.feed[0].at < t - FEED_TIME) state.feed = state.feed.filter((f) => f.at >= t - FEED_TIME)
   if (state.winner !== null && t > state.winnerAt + WIN_SHOW) {
     state.winner = null
-    state.score = Object.fromEntries(state.teams.map((team) => [team.id, 0]))
+    newRound()
   }
   publish()
 }

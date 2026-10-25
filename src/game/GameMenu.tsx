@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { CrownIcon, DoorOpenIcon, GearIcon, SpeakerIcon } from './hudIcons'
+import { leaveParty, isOnline } from './net/party'
+import { recordLeaving } from './record'
 import { getRaceView, standings, subscribeRace } from './race/race'
 import { sfx } from './race/sound'
 import { setVolume, useVolume } from './volume'
@@ -131,7 +133,18 @@ export function GameMenu({ leaveTo, final }: { leaveTo: string; final: boolean }
         >
           <Volume />
           <PrizePool final={final} />
-          <a className="game-menu-leave" href={leaveTo}>
+          {/* (A game left part way through is kept as left early, ./record; and an online show's left for good,
+              ./net/party) */}
+          <a
+            className="game-menu-leave"
+            href={leaveTo}
+            onClick={async (e) => {
+              e.preventDefault()
+              await recordLeaving()
+              if (isOnline()) leaveParty()
+              window.location.assign(leaveTo)
+            }}
+          >
             <DoorOpenIcon />
             Leave
           </a>

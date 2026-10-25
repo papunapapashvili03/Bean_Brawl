@@ -32,6 +32,7 @@ import { BOT_STARTS, OVER_ROUTE, botLane } from './route'
 import { Seesaws } from './Seesaws'
 import { TidalWave } from './TidalWave'
 import { resetWave } from './wave'
+import { roundSeedFor } from '../roundSeed'
 import { GreenWall } from './Wall'
 
 // Over & Under: a straight race down a red track in the sky (see ./course): hurdles to jump, gates to slide
@@ -171,7 +172,7 @@ function Islands() {
 
 export function OverScene() {
   useLayoutEffect(() => {
-    resetWave()
+    resetWave(roundSeedFor('over-wave'))
     startRace(OVER_COURSE)
   }, [])
 

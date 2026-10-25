@@ -25,7 +25,7 @@ export const MODES: Mode[] = [
     id: 'party-games',
     title: 'Party Games',
     tagline: 'A show of three rounds, a new map each: race to get through, then win the final.',
-    facts: ['24–30 players', '3 rounds', 'Bots fill empty spots'],
+    facts: ['Up to 10 players', '24–30 in the field', '3 rounds'],
     maps: [
       { id: 'sky', title: 'Sky Race', tag: 'Obstacle race', players: 16, meta: 'Race · 16 players', blurb: 'Down the ramp, up the coin cascade and through the door maze to the line.' },
       { id: 'tower', title: 'Tower', tag: 'Obstacle race', players: 10, meta: 'Race · 10 players', blurb: 'Climb the switchbacks past boulders, cannons and bumpers to the summit.' },
@@ -62,5 +62,3 @@ export const modeById = (id: ModeId) => MODES.find((m) => m.id === id)!
 
 // A map in a mode, played from the mode's page (the games app then shows it as a match, with a way back)
 export const playUrl = (mode: ModeId, map: string) => `/games/?mode=${mode}#${map}`
-// A party show, starting on its first map (the show itself is kept for the tab, see ../game/show)
-export const showUrl = (first: string) => `/games/?mode=party-games&show=1#${first}`

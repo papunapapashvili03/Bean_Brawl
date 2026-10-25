@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { RaceHud, type ShowHud } from './race/RaceHud'
-import { COUNTDOWN_SECONDS, eliminate, getRaceView, playerFinishClock, raceClock, racers } from './race/race'
+import { COUNTDOWN_SECONDS, eliminate, getRaceView, playerFinishClock, raceClock, racers, type RaceView } from './race/race'
+import { recordGame, whileLeaving, type Outcome } from './record'
 import { endShow, nextRound, startShow, type Show } from './show'
 
 // Runs a party show (./show) round by round, over the race HUD. A qualifying round closes as soon as its
 // quota are home (the first 16, then the first 10): through, there's a short break showing the next round,
 // and on to it with the bots that got through; not through, you're out. The final is the map's own: win
-// it and you've won the show. Either way the cards offer another show, or the lobby.
+// it and you've won the show. Either way the cards offer another show, or the lobby. How each round went for
+// you is kept (./record), for the account page.
 
 const ROUND_CAP = 300 // seconds a qualifying round can run before it closes with whoever's home
 const BREAK = 5 // seconds between rounds
@@ -41,11 +43,29 @@ export function ShowDirector({
   // Who's home, and whether the round's over
   useEffect(() => {
     if (stage !== 'playing') return
+    // (Kept once, as the round's over for you)
+    const record = (outcome: Outcome, place: number, view: RaceView) => {
+      window.clearInterval(check)
+      void recordGame({
+        mode: 'party-games',
+        map: show.rounds[show.round].map,
+        show_id: show.id,
+        round: show.round + 1,
+        rounds: show.rounds.length,
+        outcome,
+        place,
+        field: view.field,
+        seconds: view.elapsed,
+      })
+    }
     const check = window.setInterval(() => {
       const view = getRaceView()
       if (quota === null) {
-        if (view.phase === 'finished') setStage('won')
-        else if (view.phase === 'eliminated') {
+        if (view.phase === 'finished') {
+          record('won', view.place ?? 1, view)
+          setStage('won')
+        } else if (view.phase === 'eliminated') {
+          record('out', view.place ?? view.field, view)
           setOutAt({ place: view.place ?? view.field, of: view.field })
           setStage('out')
         }
@@ -61,7 +81,9 @@ export function ShowDirector({
       setHome(Math.min(finished.length, quota))
       if (finished.length < quota && raceClock() < COUNTDOWN_SECONDS + ROUND_CAP) return
       const through = finished.slice(0, quota)
-      if (through.some((f) => f.name === YOU)) {
+      const mineAt = through.findIndex((f) => f.name === YOU)
+      if (mineAt >= 0) {
+        record('through', mineAt + 1, view)
         setUpcoming(
           nextRound(
             show,
@@ -71,6 +93,7 @@ export function ShowDirector({
         setStage('break')
       } else {
         // (In a race, where you'd got to when the last place through went)
+        record('out', view.position, view)
         setOutAt({ place: view.position, of: view.field })
         eliminate()
         endShow()
@@ -79,6 +102,17 @@ export function ShowDirector({
     }, 200)
     return () => window.clearInterval(check)
   }, [stage, show, quota])
+
+  // Leaving before my show's over for me counts: out, left early (../record)
+  useEffect(() => {
+    if (stage !== 'playing' && stage !== 'break') return
+    return whileLeaving(() => {
+      // (Not before the first round's even started)
+      if (show.round === 0 && raceClock() < COUNTDOWN_SECONDS) return null
+      const view = getRaceView()
+      return { mode: 'party-games', map: round.map, show_id: show.id, round: show.round + 1, rounds: last, outcome: 'out', place: view.position, field: view.field, seconds: view.elapsed }
+    })
+  }, [stage, show, round.map, last])
 
   // The break: counting down to the next round
   useEffect(() => {

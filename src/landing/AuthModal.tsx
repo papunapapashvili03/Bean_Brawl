@@ -1,13 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CODE_LENGTH,
+  EMAIL_CODES,
+  PASSWORD_MIN,
   RESEND_AFTER,
   checkCode,
   checkEmail,
+  checkPassword,
   checkUsername,
   playAsGuest,
+  registerWithPassword,
   sendRegisterCode,
   sendSignInCode,
+  signInWithPassword,
   useAuth,
   verifyCode,
   type CodeFor,
@@ -15,12 +20,13 @@ import {
 import { MailIcon } from './icons'
 import { Modal } from './Modal'
 
-// Signing in or registering (./auth), with the two as tabs along the top, in two steps: your email (and,
-// registering, a username), then the code Supabase emails you. Or straight in as a guest. It closes once
-// you're in. Registering while signed in as a guest keeps the guest's account, adding the email to it.
+// Signing in or registering (./auth), with the two as tabs along the top: your email and password (and,
+// registering, a username), and you're in. (Or, with EMAIL_CODES on, in two steps: your email, then the code
+// Supabase emails you.) Or straight in as a guest. It closes once you're in. Registering while signed in as a
+// guest keeps the guest's account, adding the email to it.
 
 export type AuthTab = 'signin' | 'register'
-type Busy = 'send' | 'verify' | 'resend' | 'guest' | null
+type Busy = 'send' | 'verify' | 'resend' | 'guest' | 'password' | null
 // Where the code went, and what for
 type Sent = { email: string; codeFor: CodeFor }
 
@@ -28,6 +34,7 @@ export function AuthModal({ initialTab, onClose }: { initialTab: AuthTab; onClos
   const [tab, setTab] = useState<AuthTab>(initialTab)
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [sent, setSent] = useState<Sent | null>(null)
   const [wait, setWait] = useState(0) // seconds until a code can be sent again
@@ -79,6 +86,23 @@ export function AuthModal({ initialTab, onClose }: { initialTab: AuthTab; onClos
     } else onClose()
   }
 
+  // With a password: straight in (registering, the account's made there and then)
+  const passwordIn = async () => {
+    const address = email.trim().toLowerCase()
+    const problem = (registering ? checkUsername(username.trim()) : null) ?? checkEmail(address) ?? (registering ? checkPassword(password) : password ? null : 'Enter your password.')
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy('password')
+    setError(null)
+    const failed = registering ? await registerWithPassword(username.trim(), address, password) : await signInWithPassword(address, password)
+    if (failed) {
+      setBusy(null)
+      setError(failed)
+    } else onClose()
+  }
+
   const guestIn = async () => {
     setBusy('guest')
     setError(null)
@@ -91,7 +115,8 @@ export function AuthModal({ initialTab, onClose }: { initialTab: AuthTab; onClos
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (sent) verify()
+    if (!EMAIL_CODES) passwordIn()
+    else if (sent) verify()
     else send()
   }
 
@@ -181,6 +206,19 @@ export function AuthModal({ initialTab, onClose }: { initialTab: AuthTab; onClos
                 placeholder="you@example.com"
               />
             </label>
+            {!EMAIL_CODES && (
+              <label className="auth-field">
+                <span>Password</span>
+                <input
+                  className="field"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={registering ? 'new-password' : 'current-password'}
+                  placeholder={registering ? `At least ${PASSWORD_MIN} characters` : 'Your password'}
+                />
+              </label>
+            )}
           </>
         )}
         {error && (
@@ -189,7 +227,15 @@ export function AuthModal({ initialTab, onClose }: { initialTab: AuthTab; onClos
           </div>
         )}
         <button className="auth-submit" type="submit" disabled={!!busy}>
-          {sent
+          {!EMAIL_CODES
+            ? busy === 'password'
+              ? registering
+                ? 'Creating account…'
+                : 'Signing in…'
+              : registering
+                ? 'Create account'
+                : 'Sign in'
+            : sent
             ? busy === 'verify'
               ? 'Checking…'
               : registering

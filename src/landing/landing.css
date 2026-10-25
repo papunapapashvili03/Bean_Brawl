@@ -1209,6 +1209,140 @@ img.avatar {
   font-weight: 600;
 }
 
+/* Stats: a grid of numbers, then the recent games */
+.panel-empty + .section-label,
+.stat-grid + .section-label,
+.details + .section-label {
+  margin-top: 28px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  background: var(--seam);
+}
+
+.stat {
+  padding: 22px 24px;
+  background: var(--panel);
+}
+
+.stat-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-note {
+  color: var(--label);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stat-label {
+  margin-top: 4px;
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rating-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  background: var(--seam);
+}
+
+.rating-form {
+  margin-top: 8px;
+  color: #ffd27a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rating-about {
+  padding: 18px 24px;
+  border-top: 2px solid var(--seam);
+  color: var(--label);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+
+.game + .game {
+  border-top: 1px solid var(--seam);
+}
+
+.game-main {
+  min-width: 0;
+}
+
+.game-map {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.game-mode {
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.game-meta {
+  margin-top: 4px;
+  color: #c9cdf0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.game-when {
+  color: #5d6596;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-won {
+  background: rgba(255, 196, 61, 0.16);
+  color: #ffd27a;
+}
+
+.badge-through {
+  background: rgba(124, 240, 138, 0.14);
+  color: #8ff0a0;
+}
+
+.badge-out,
+.badge-lost {
+  background: rgba(255, 107, 107, 0.14);
+  color: #ff9a9a;
+}
+
 /* ---------- Dialogs ---------- */
 .sr-only {
   position: absolute;
@@ -1669,6 +1803,18 @@ img.avatar {
   }
   .row-buttons {
     gap: 8px;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rating-about {
+    padding: 16px 20px;
+  }
+  .stat {
+    padding: 18px 20px;
+  }
+  .details {
+    padding: 6px 20px;
   }
 }
 

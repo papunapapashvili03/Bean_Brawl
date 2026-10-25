@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { roundRandom } from '../roundSeed'
 import { Sky } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
@@ -172,7 +173,7 @@ function Sun() {
 }
 
 export function SkyScene() {
-  const [doorLayout] = useState(() => pickDoorLayout())
+  const [doorLayout] = useState(() => pickDoorLayout(roundRandom('sky-doors')))
   useLayoutEffect(() => {
     startRace(SKY_COURSE)
   }, [])

@@ -10,6 +10,7 @@ import { devZoomScale } from './devZoom'
 import { setActivePlayer, type Stance } from './playerContact'
 import { STANCES, STANCE_RATE, createRunner, damp, knockRunner, restingMotion, stepRunner, type PlayerRules, type Runner, type RunnerInput } from './runner'
 import { touch } from './touch/touch'
+import { myStart } from './net/party'
 
 // The player: a runner's body (./runner) told what to do by the keyboard (or, on a phone or tablet, the
 // on-screen controls: ./touch), with the camera following it. Input is relative to the camera: W runs away
@@ -130,6 +131,9 @@ export function Player({ spawn = [0, 3, 0], rules }: { spawn?: [number, number, 
   useEffect(() => {
     const rb = body.current!
     const r = (runner.current ??= createRunner(motion))
+    // (In a show played online, the other players take some of the bots' starts: see ./race/bots/RaceBots)
+    const start = myStart()
+    if (start) rb.setTranslation({ x: start[0], y: start[1], z: start[2] }, true)
     return setActivePlayer({
       handle: rb.handle,
       position: () => rb.translation(),

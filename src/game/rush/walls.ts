@@ -14,6 +14,7 @@ import {
   WALL_DEPTH,
   WALL_HEIGHT,
 } from './course'
+import { roundSeedFor } from '../roundSeed'
 
 // The round's walls: when each comes up, what it's made of, and where it is at any time on the match clock.
 // They all slide at the same speed (quickening through the round), so they keep their distance. Worked out
@@ -121,7 +122,7 @@ export function resetWalls() {
   round.at = Infinity
   round.lastStanding = false
   round.winner = null
-  planWalls()
+  planWalls(roundSeedFor('rush'))
 }
 
 export function endRound(lastStanding: boolean, winner: string | null, at: number) {

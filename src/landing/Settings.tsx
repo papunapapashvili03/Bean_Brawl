@@ -1,21 +1,24 @@
 import { useState, type FormEvent } from 'react'
-import { NAME_MAX, changeName, checkName, signOut, type Account, type AccountKind } from './auth'
+import { EMAIL_CODES, NAME_MAX, changeName, checkName, signOut, type Account, type AccountKind } from './auth'
 import { Avatar } from './Avatar'
 import { CogIcon, LogoutIcon, ShieldIcon } from './icons'
+import { Stats } from './Stats'
 
 // The account page (from the profile button): who you're signed in as (./auth): your profile (and changing
 // the name you go by), the account's details (your email, how you sign in, its ID, when it was made and last
-// used), security, and signing out here or everywhere. Signed out, it offers Sign in and Register. Two-factor
-// sign-in, Affiliates and Transactions are still to come.
+// used), security, and signing out here or everywhere; and your stats, from the games you've played (./Stats).
+// Signed out, it offers Sign in and Register. Two-factor sign-in, Affiliates and Transactions are still to
+// come.
 
-type Tab = 'account' | 'affiliates' | 'transactions'
+type Tab = 'account' | 'stats' | 'affiliates' | 'transactions'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'account', label: 'Account' },
+  { id: 'stats', label: 'Stats' },
   { id: 'affiliates', label: 'Affiliates' },
   { id: 'transactions', label: 'Transactions' },
 ]
 
-const METHOD: Record<AccountKind, string> = { email: 'Email code', guest: 'Guest (temporary)' }
+const METHOD: Record<AccountKind, string> = { email: EMAIL_CODES ? 'Email code' : 'Email & password', guest: 'Guest (temporary)' }
 const BADGE: Record<AccountKind, string> = { email: 'Player', guest: 'Guest' }
 
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -23,13 +26,13 @@ const moment = (iso: string) => new Date(iso).toLocaleString(undefined, { day: '
 
 type Handlers = { onSignIn: () => void; onRegister: () => void }
 
-function SignedOut({ onSignIn, onRegister }: Handlers) {
+function SignedOut({ onSignIn, onRegister, label = 'Profile', text = 'You’re not signed in.' }: Handlers & { label?: string; text?: string }) {
   return (
     <>
-      <div className="section-label">Profile</div>
+      <div className="section-label">{label}</div>
       <div className="panel">
         <div className="row">
-          <div className="row-title">You’re not signed in.</div>
+          <div className="row-title">{text}</div>
           <div className="row-buttons">
             <button className="btn" onClick={onSignIn}>
               Sign in
@@ -265,6 +268,9 @@ export function Settings({ account, ready, onSignIn, onRegister }: Handlers & { 
           ))}
         </div>
         {tab === 'account' && ready && (account ? <SignedIn account={account} onRegister={onRegister} /> : <SignedOut onSignIn={onSignIn} onRegister={onRegister} />)}
+        {tab === 'stats' &&
+          ready &&
+          (account ? <Stats key={account.id} /> : <SignedOut onSignIn={onSignIn} onRegister={onRegister} label="Stats" text="Sign in to keep stats of your games." />)}
         {tab === 'affiliates' && <Empty text="No affiliates yet." />}
         {tab === 'transactions' && <Empty text="No transactions yet." />}
       </div>

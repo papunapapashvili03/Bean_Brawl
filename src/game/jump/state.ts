@@ -1,4 +1,5 @@
 import { COUNTDOWN_SECONDS } from '../race/race'
+import { roundRandom, shuffle } from '../roundSeed'
 import { DROP_EVERY, DROP_WARN, FIRST_DROP, KEEP, SECTIONS, SWAY, SWAY_RATE, spinAt, turned } from './course'
 
 // This round: where the beams are at any moment (they stop when the round's decided), which sections drop
@@ -19,7 +20,7 @@ export function resetJump() {
   round.lastStanding = false
   round.winner = null
   round.stopAt = Infinity
-  const order = Array.from({ length: SECTIONS }, (_, s) => s).sort(() => Math.random() - 0.5)
+  const order = shuffle(Array.from({ length: SECTIONS }, (_, s) => s), roundRandom('jump'))
   dropAt.fill(Infinity)
   dropped.fill(0)
   order.slice(0, SECTIONS - KEEP).forEach((s, k) => (dropAt[s] = RUN + FIRST_DROP + k * DROP_EVERY))

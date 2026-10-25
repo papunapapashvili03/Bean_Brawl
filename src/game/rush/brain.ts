@@ -45,11 +45,11 @@ export class RushBrain implements Steering {
   private me = -1 // its body's handle
 
   constructor(bot: BotTraits) {
-    const level = Math.max(0, Math.min(1, (bot.skill.speed - 0.78) / 0.19))
+    const { level, mistakes, reaction } = bot.skill
     this.speed = SPEED * bot.skill.speed
-    this.sway = 0.55 + 0.45 * level
-    this.slips = 0.03 + 0.12 * (1 - level) ** 2
-    this.notice = 0.25 + 0.7 * (1 - level) * (0.5 + Math.random() * 0.5)
+    this.sway = (0.55 + 0.45 * level) / reaction
+    this.slips = (0.03 + 0.12 * (1 - level) ** 2) * mistakes
+    this.notice = (0.25 + 0.7 * (1 - level) * (0.5 + Math.random() * 0.5)) * reaction
     this.start = bot.skill.start
     this.lapse = bot.skill.lapse
   }
