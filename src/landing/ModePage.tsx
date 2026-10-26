@@ -6,6 +6,7 @@ import type { Account } from './auth'
 import { CharacterStage, type Facing } from './CharacterStage'
 import { FIELD, ONLINE_SHOW_URL, QUOTAS, ROUND_POOLS } from '../game/show'
 import { modeById, playUrl, type Mode, type ModeId } from './data'
+import { sol, useMoney } from './money'
 import { OptionIcon, SlotGlyph } from './wardrobeIcons'
 
 // A mode's page: the lobby. On the left, your bean in a spotlight, and along the foot of it the wardrobe, one
@@ -14,7 +15,9 @@ import { OptionIcon, SlotGlyph } from './wardrobeIcons'
 // Play, which joins a game: "Joining the Server" counts up until one's found (Cancel backs out), then it
 // loads in the games app. Party Games plays a show of three rounds (../game/show), so its side lays out the
 // rounds and the maps each can be, and Play goes straight to the games app, which finds other players to
-// play it with (../game/net/party). Shoot Out plays one map, chosen here (or a random one).
+// play it with (../game/net/party). A show can be played free, or for a stake (one of the server's tiers,
+// from your balance on the site: ./money); playing for one checks you're signed in, and that your balance
+// covers it, first. Shoot Out plays one map, chosen here (or a random one).
 
 const RANDOM = 'random'
 const SEARCH_MIN = 2.5 // seconds a join takes, give or take
@@ -147,6 +150,48 @@ function Wardrobe({ open, onOpen, onWear }: { open: SlotId | null; onOpen: (slot
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Party Games: the stake
+
+const STAKE_KEY = 'fallguy.stake'
+const savedStake = () => {
+  try {
+    return Number(localStorage.getItem(STAKE_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
+// How a pot's shared out (of what's left after the site's fee), by how many players stake on the show
+const SHARES = 'The winner takes it all with 2 players, the top 2 share it with 3–4, the top 3 with 5 or more.'
+
+function Stakes({ tier, onPick }: { tier: number; onPick: (tier: number) => void }) {
+  const { config, me } = useMoney()
+  const tiers = config?.on ? config.tiers : [0]
+  const stake = tiers[tier] ?? 0
+  return (
+    <section className="lobby-maps" aria-labelledby="stake-label">
+      <h2 id="stake-label" className="lobby-label">
+        Stake{config?.on && config.network !== 'mainnet-beta' ? <span className="stake-net">devnet · test SOL</span> : null}
+      </h2>
+      <div className="stake-list" role="radiogroup" aria-labelledby="stake-label">
+        {tiers.map((lamports, i) => (
+          <button key={lamports} className="stake-choice" role="radio" aria-checked={tier === i} onClick={() => onPick(i)}>
+            {lamports ? `${sol(lamports, 2)} SOL` : 'Free'}
+          </button>
+        ))}
+      </div>
+      <p className="stake-note">
+        {!config?.on
+          ? 'Playing for SOL isn’t switched on yet: shows are free.'
+          : stake
+            ? `Everyone in the show stakes ${sol(stake, 2)} SOL. The pot, less the site’s ${Math.round(config.fee * 100)}%, goes to the players who come top (bots never win money). ${SHARES} With fewer than 2 staking, the show’s free and nothing’s taken.${me ? ` Your balance: ${sol(me.balance)} SOL.` : ''}`
+            : 'No stake: just for the crown.'}
+      </p>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Maps and Play
 
 const savedMap = (mode: ModeId) => {
@@ -273,7 +318,21 @@ function Joining({ mode, waiting, resolve, onCancel }: { mode: Mode; waiting: st
 
 // ---------------------------------------------------------------------------------------------------------
 
-export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId; account: Account | null; ready: boolean; onSignIn: () => void }) {
+export function ModePage({
+  mode: id,
+  account,
+  ready,
+  onSignIn,
+  onRegister,
+  onWallet,
+}: {
+  mode: ModeId
+  account: Account | null
+  ready: boolean
+  onSignIn: () => void
+  onRegister: () => void
+  onWallet: () => void
+}) {
   const mode = modeById(id)
   const [map, setMap] = useState(() => {
     const saved = savedMap(id)
@@ -314,6 +373,31 @@ export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId;
   }
   const chosen = mode.maps.find((m) => m.id === map) ?? null
   const party = id === 'party-games'
+  const money = useMoney()
+  const [tier, setTier] = useState(savedStake)
+  const tiers = money.config?.on ? money.config.tiers : [0]
+  const stake = tiers[tier] ?? 0
+  const pickTier = (next: number) => {
+    setTier(next)
+    try {
+      localStorage.setItem(STAKE_KEY, String(next))
+    } catch {
+      // (not remembered)
+    }
+  }
+  // Play: a show (free, or for the stake: signed in, not as a guest, with the balance for it), or a map
+  const play = () => {
+    if (!party) return setJoining(true)
+    // (Trying it out against the game server on this computer: the games use it too)
+    const local = new URLSearchParams(window.location.search).get('mp') === 'local' ? '&mp=local' : ''
+    if (!stake) return window.location.assign(`${ONLINE_SHOW_URL}${local}`)
+    // (The game server says who it knows you as: no balance from it, and it's sign in, or register)
+    if (money.status === 'signed-out') return onSignIn()
+    if (money.status === 'guest') return onRegister()
+    if (!money.me || money.me.balance < stake) return onWallet()
+    const dev = new URLSearchParams(window.location.search).get('devuser')
+    window.location.assign(`${ONLINE_SHOW_URL}&stake=${tier}${local}${import.meta.env.DEV && dev ? `&devuser=${encodeURIComponent(dev)}` : ''}`)
+  }
 
   // Once a server's found: the map chosen (or a random one)
   const resolve = useCallback((): Target => {
@@ -359,7 +443,10 @@ export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId;
         </header>
 
         {party ? (
-          <ShowPlan mode={mode} />
+          <>
+            <ShowPlan mode={mode} />
+            <Stakes tier={tiers[tier] === undefined ? 0 : tier} onPick={pickTier} />
+          </>
         ) : (
           <section className="lobby-maps" aria-labelledby="maps-label">
             <h2 id="maps-label" className="lobby-label">
@@ -379,14 +466,14 @@ export function ModePage({ mode: id, account, ready, onSignIn }: { mode: ModeId;
             <div className="lobby-play-map">{party ? `${ROUND_POOLS.length} rounds` : chosen ? chosen.title : 'Random map'}</div>
             <div className="lobby-play-note">
               {party
-                ? 'Up to 10 players: the lobby waits 30 seconds for them, and bots fill the rest of the field.'
+                ? `Up to 10 players: the lobby waits 30 seconds for them, and bots fill the rest of the field.${stake ? ` Stake: ${sol(stake, 2)} SOL.` : ''}`
                 : chosen
                   ? chosen.blurb
                   : `Any of the ${mode.maps.length} maps: you'll see which when the server's found.`}
             </div>
           </div>
-          <button className="play" onClick={() => (party ? window.location.assign(ONLINE_SHOW_URL) : setJoining(true))}>
-            Play
+          <button className="play" onClick={play}>
+            {stake ? `Play · ${sol(stake, 2)} SOL` : 'Play'}
           </button>
         </div>
       </aside>

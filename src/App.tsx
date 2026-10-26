@@ -179,7 +179,7 @@ export default function App() {
       {devTools && <DevZoomButton />}
       {devTools && <Wardrobe />}
       {/* Settings: volume, the prize pool, and the way out (./game/GameMenu) */}
-      <GameMenu leaveTo={leaveTo} final={!!show && show.rounds[show.round].quota === null} />
+      <GameMenu leaveTo={leaveTo} />
       {/* Phones and tablets: a stick and buttons on the screen (./game/touch) */}
       <TouchControls />
     </KeyboardControls>

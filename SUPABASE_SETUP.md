@@ -116,7 +116,13 @@ Each game kept in `game_results` notes the preset it was played with (`bot_prese
 Only games played after this is set up are rated (games kept before it don't count). Players who aren't
 signed in are rated the same way in their own browser.
 
-## 6. Site address
+## 6. SOL balances (wallet and stakes)
+
+**SQL Editor → New query**, paste all of `supabase/wallet.sql`, and **Run**. It makes the players' balances,
+the ledger of every change to them, the staked shows, and the functions the game server changes them with
+(nobody else can). Then follow **WALLET.md** for the house wallet and the server's settings.
+
+## 7. Site address
 
 **Authentication → URL Configuration**
 
@@ -125,12 +131,12 @@ signed in are rated the same way in their own browser.
 
 (Passwords don't use these, but Supabase puts the Site URL into any emails and links it sends.)
 
-## 7. Tidy up
+## 8. Tidy up
 
 **Authentication → Users**: if there's a user called `qa_whirl_7341` (from testing the old username sign-up),
 delete it.
 
-## 8. Try it
+## 9. Try it
 
 Run the site (`npm run dev`), open http://localhost:5173 and:
 

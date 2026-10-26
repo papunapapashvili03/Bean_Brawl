@@ -1,17 +1,13 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CrownIcon, DoorOpenIcon, GearIcon, SpeakerIcon } from './hudIcons'
-import { leaveParty, isOnline } from './net/party'
+import { sol } from '../landing/money'
+import { leaveParty, isOnline, useParty } from './net/party'
 import { recordLeaving } from './record'
-import { getRaceView, standings, subscribeRace } from './race/race'
 import { sfx } from './race/sound'
 import { setVolume, useVolume } from './volume'
 
-// The in-game menu, behind the cog in the top right: the volume, the prize pool (still to come: what the
-// final round's top places would win, with that final's ranking as it stands, the crown for 1st), and the way
-// out. Escape, or a click anywhere else, closes it.
-
-const YOU = { name: 'You', colour: '#ff6b35' }
-const PLACES = 3 // places shown in the prize pool
+// The in-game menu, behind the cog in the top right: the volume, the prize pool (in a show played for a
+// stake: the pot, and what each paid place wins), and the way out. Escape, or a click anywhere else, closes it.
 
 function ordinal(n: number) {
   const suffix = ['th', 'st', 'nd', 'rd']
@@ -50,45 +46,43 @@ function Volume() {
   )
 }
 
-// The final's top places: who holds each (a tie at the top is everyone still standing), and their prize
-function PrizePool({ final }: { final: boolean }) {
-  useSyncExternalStore(subscribeRace, getRaceView) // (redrawn as the final's field goes out)
-  const ranks = final ? standings(YOU) : []
-  const rows = Array.from({ length: PLACES }, (_, i) => {
-    const place = i + 1
-    const holders = ranks.filter((r) => r.place === place)
-    return { place, holders }
-  })
+// The prize pool of a show played for a stake: the pot, and what each paid place wins (the pot less the
+// site's fee, shared by place). Players only: bots never win money.
+function PrizePool() {
+  const { money, paid } = useParty()
+  if (!money?.stake) {
+    return (
+      <div className="game-menu-section">
+        <div className="game-menu-heading">Prize pool</div>
+        <p className="game-menu-note">{money?.freed ? 'Too few players staked, so this show’s free: nothing was taken.' : 'A free game: nothing at stake.'}</p>
+      </div>
+    )
+  }
+  const prize = money.pot * (1 - money.fee)
   return (
     <div className="game-menu-section">
-      <div className="game-menu-heading">
-        Prize pool <span className="game-menu-soon">Coming soon</span>
-      </div>
+      <div className="game-menu-heading">Prize pool</div>
       <div className="game-menu-pool">
-        <span>Pool</span>
-        <b>— SOL</b>
+        <span>Pot · {sol(money.stake, 2)} SOL each</span>
+        <b>{sol(money.pot)} SOL</b>
       </div>
       <ol className="game-menu-ranks">
-        {rows.map(({ place, holders }) => {
-          const one = holders.length === 1 ? holders[0] : null
-          return (
-            <li key={place} className={`${place === 1 ? 'first' : ''}${one?.you ? ' you' : ''}`}>
-              <span className="game-menu-rank">{place === 1 ? <CrownIcon size={20} /> : ordinal(place)}</span>
-              <span className="game-menu-who">
-                {one && <i style={{ background: one.colour }} />}
-                {one ? one.name : holders.length > 1 ? `${holders.length} still standing` : '—'}
-              </span>
-              <span className="game-menu-prize">—</span>
-            </li>
-          )
-        })}
+        {money.split.map((share, i) => (
+          <li key={i} className={`${i === 0 ? 'first' : ''}${paid?.place === i + 1 ? ' you' : ''}`}>
+            <span className="game-menu-rank">{i === 0 ? <CrownIcon size={20} /> : ordinal(i + 1)}</span>
+            <span className="game-menu-who">{paid?.place === i + 1 ? 'You' : `${Math.round(share * 100)}%`}</span>
+            <span className="game-menu-prize">{sol(Math.floor(prize * share))} SOL</span>
+          </li>
+        ))}
       </ol>
-      <p className="game-menu-note">{final ? "Paid out on this final's ranking." : "Paid out on the final round's ranking."}</p>
+      <p className="game-menu-note">
+        Paid to the players only, by how far each gets in the show (bots never win money); the site keeps {Math.round(money.fee * 100)}%.
+      </p>
     </div>
   )
 }
 
-export function GameMenu({ leaveTo, final }: { leaveTo: string; final: boolean }) {
+export function GameMenu({ leaveTo }: { leaveTo: string }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -132,7 +126,7 @@ export function GameMenu({ leaveTo, final }: { leaveTo: string; final: boolean }
           }}
         >
           <Volume />
-          <PrizePool final={final} />
+          <PrizePool />
           {/* (A game left part way through is kept as left early, ./record; and an online show's left for good,
               ./net/party) */}
           <a

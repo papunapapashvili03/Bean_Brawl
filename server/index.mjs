@@ -12,16 +12,22 @@
 //   Each player says how hard it needs the bots (its difficulty: src/game/bots/difficulty.ts), and each
 //   round the server sets the field from the players in it: the bulk of the bots as hard as the one who
 //   needs it easiest, the best few as hard as the one who needs it hardest.
+// - Shows played for stakes (./wallet.mjs): each stake tier has its own lobby. As the show starts, each
+//   signed-in player's stake comes off their balance; when it ends, the pot (less the site's fee) goes to
+//   the players who came top, ranked among the players only (bots never win money). With fewer than two
+//   players staking, the show's played free and nothing's taken.
 //
 // It also tells each room who's joined (name, colour, outfit) and who's left, and answers pings (with the
 // server's clock, so players can see their lag and time things by it). Each player is trusted with its own
-// bean and its own finish: fine for playing together, not for anything with prizes.
+// bean and its own finish: fine for playing together, NOT YET for real money (see WALLET.md). The wallet's
+// own requests (deposits, withdrawals) are HTTP: /wallet/... (./wallet.mjs).
 //
 // Runs anywhere Node does: `npm start` (port 2567, or $PORT, as on Railway). GET / answers "ok", for health checks.
 
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
+import { FEE, TIERS, handleWallet, moneyOn, payoutsFor, splitFor, stakes } from './wallet.mjs'
 
 const PORT = Number(process.env.PORT) || 2567
 const PLAYGROUND = 'playground'
@@ -54,8 +60,9 @@ const OUTFIT_KEYS = ['hat', 'face', 'shades', 'back', 'flag']
 
 /**
  * @typedef {{ id: number, ws: import('ws').WebSocket, name: string, colour: string, outfit: Record<string, string>, room: string | null, party: Party | null, alive: boolean, window: number, count: number }} Player
- * @typedef {{ id: number, p: Player | null, name: string, colour: string, outfit: Record<string, string>, ticket: string, state: 'in' | 'out', goneAt: number, away: boolean, skill: { q: number, f: number } }} Member
- * @typedef {{ id: string, room: string, seed: number, startAt: number, started: boolean, over: boolean, members: Map<number, Member>, round: number, at: number, quota: number | null, ends: Map<string, { how: string, clock: number }>, decideAt: number | null, host: number | null, emptySince: number | null }} Party
+ * @typedef {{ reached: number, finish: number | null }} Result how far a player got, if it went out before the final
+ * @typedef {{ id: number, p: Player | null, name: string, colour: string, outfit: Record<string, string>, ticket: string, state: 'in' | 'out', goneAt: number, away: boolean, skill: { q: number, f: number }, user: string | null, result: Result | null }} Member
+ * @typedef {{ id: string, room: string, seed: number, tier: number, staked: boolean, stake: number, pot: number, freed: boolean, startAt: number, starting: boolean, started: boolean, over: boolean, members: Map<number, Member>, round: number, at: number, quota: number | null, ends: Map<string, { how: string, clock: number }>, decideAt: number | null, host: number | null, emptySince: number | null }} Party
  */
 
 /** @type {Map<string, Map<number, Player>>} who's in each room */
@@ -64,11 +71,14 @@ const rooms = new Map()
 const connected = new Set()
 /** @type {Map<string, Party>} lobbies and shows, by id */
 const parties = new Map()
-/** @type {Party | null} the lobby taking players now */
-let open = null
+/** @type {Map<number, Party>} the lobby taking players now, for each stake tier */
+const open = new Map()
+/** @type {Map<string, Party>} the lobby or show each account's staking in */
+const staking = new Map()
 let nextId = 1
 
 const http = createServer((req, res) => {
+  if (handleWallet(req, res)) return
   res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' })
   const playground = rooms.get(PLAYGROUND)?.size ?? 0
   const shows = [...parties.values()].filter((p) => p.started && !p.over).length
@@ -147,17 +157,43 @@ function join(p, message) {
 
 const here = (party) => [...party.members.values()].filter((m) => m.p)
 
-function queue(p, message) {
-  if (p.room) return
+// (A player turned away from a staked show: why, for the game to say)
+const refuse = (p, code, message) => send(p.ws, { t: 'error', reason: 'stake', code, message })
+
+async function queue(p, message) {
+  if (p.room || p.queueing) return
+  const tier = Number.isInteger(message.stake) && message.stake > 0 && message.stake < TIERS.length ? message.stake : 0
+  // Staking: signed in, with enough in the balance, and not staking on another show already
+  let user = null
+  if (tier > 0) {
+    if (!moneyOn) return refuse(p, 'off', 'Staked shows aren’t on yet. Play a free one instead.')
+    p.queueing = true
+    try {
+      user = await stakes.check(message.token, tier)
+    } catch (e) {
+      return refuse(p, e.code ?? 'server', e.code ? e.message : 'Couldn’t check your balance: try again.')
+    } finally {
+      p.queueing = false
+    }
+    if (p.room || p.ws.readyState !== p.ws.OPEN) return
+    if (staking.has(user)) return refuse(p, 'busy', 'You’re in a staked show already (in another tab?).')
+  }
   p.name = cleanName(message.name)
   p.outfit = cleanOutfit(message.outfit)
-  if (!open || open.started || open.members.size >= PARTY_MAX) {
+  let party = open.get(tier)
+  if (!party || party.starting || party.started || party.members.size >= PARTY_MAX) {
     const id = randomUUID()
-    open = {
+    party = {
       id,
       room: `party:${id}`,
       seed: Math.floor(Math.random() * 2 ** 31),
+      tier,
+      staked: false,
+      stake: 0,
+      pot: 0,
+      freed: false,
       startAt: Date.now() + LOBBY_WAIT,
+      starting: false,
       started: false,
       over: false,
       members: new Map(),
@@ -169,37 +205,141 @@ function queue(p, message) {
       host: null,
       emptySince: null,
     }
-    parties.set(id, open)
+    parties.set(id, party)
+    open.set(tier, party)
   }
-  const party = open
   p.colour = freeColour([...party.members.values()].map((m) => m.colour))
-  party.members.set(p.id, { id: p.id, p, name: p.name, colour: p.colour, outfit: p.outfit, ticket: randomBytes(12).toString('hex'), state: 'in', goneAt: 0, away: false, skill: cleanSkill(message.skill) })
+  party.members.set(p.id, { id: p.id, p, name: p.name, colour: p.colour, outfit: p.outfit, ticket: randomBytes(12).toString('hex'), state: 'in', goneAt: 0, away: false, skill: cleanSkill(message.skill), user, result: null })
+  if (user) staking.set(user, party)
   p.party = party
   enter(p, party.room)
   if (party.members.size >= PARTY_MAX) {
     party.startAt = Math.min(party.startAt, Date.now() + FULL_WAIT)
     broadcast(party.room, { t: 'starts', at: party.startAt }, p)
   }
-  send(p.ws, { t: 'lobby', id: party.id, seed: party.seed, startAt: party.startAt, max: PARTY_MAX, you: p.id, colour: p.colour, players: here(party).filter((m) => m.p !== p).map(describe) })
+  send(p.ws, { t: 'lobby', id: party.id, seed: party.seed, startAt: party.startAt, max: PARTY_MAX, you: p.id, colour: p.colour, stake: TIERS[tier], players: here(party).filter((m) => m.p !== p).map(describe) })
   broadcast(party.room, { t: 'join', player: describe(p) }, p)
-  console.log(`${p.name} (#${p.id}) queued for a show: ${party.members.size} in its lobby`)
+  console.log(`${p.name} (#${p.id}) queued for a ${tier ? `${TIERS[tier] / 1e9} SOL` : 'free'} show: ${party.members.size} in its lobby`)
 }
 
-// The lobby's waited long enough (or it's full): the show starts, with everyone there
-function startShow(party) {
+// An account's free to stake on another show (it's out of this one, or this one's over)
+function release(m) {
+  if (m.user && staking.get(m.user)?.members.get(m.id) === m) staking.delete(m.user)
+}
+
+// The lobby's waited long enough (or it's full): the show starts, with everyone there. Staked, their stakes
+// are taken first: anyone whose balance can't cover it now is left out (told why); and with fewer than two
+// staking, it's played free.
+async function startShow(party) {
+  party.starting = true
+  if (open.get(party.tier) === party) open.delete(party.tier)
+  let paid = []
+  if (party.tier > 0) {
+    const stakers = here(party).filter((m) => m.user)
+    if (stakers.length >= 2) {
+      try {
+        paid = await stakes.start(party.id, party.tier, stakers.map((m) => m.user))
+      } catch (e) {
+        console.error(`Show ${party.id.slice(0, 8)}: couldn't take the stakes (${e.message}): played free`)
+      }
+      if (paid.length === 1) {
+        await stakes.refund(party.id).catch((e) => console.error(`Show ${party.id.slice(0, 8)}: refund failed: ${e.message}`))
+        paid = []
+      }
+    }
+    if (paid.length >= 2) {
+      party.staked = true
+      party.stake = TIERS[party.tier]
+      party.pot = party.stake * paid.length
+      for (const m of stakers) {
+        if (paid.includes(m.user)) continue
+        if (m.p) {
+          refuse(m.p, 'balance', 'Your balance couldn’t cover the stake by the time the show started.')
+          exit(m.p)
+          m.p.party = null
+        }
+        party.members.delete(m.id)
+        release(m)
+      }
+    } else {
+      party.freed = true
+      for (const m of stakers) release(m)
+    }
+  }
   party.started = true
-  if (open === party) open = null
   const players = here(party)
     .sort((a, b) => a.id - b.id)
     .map(describe)
-  for (const [id, m] of party.members) if (!m.p) party.members.delete(id)
+  // (Gone while the stakes were taken: out of it, but a staked player's still in the standings)
+  for (const [id, m] of party.members) {
+    if (m.p) continue
+    if (party.staked && paid.includes(m.user)) out(party, m)
+    else {
+      party.members.delete(id)
+      release(m)
+    }
+  }
   party.round = 0
   party.at = Date.now() + FIRST_ROUND_IN
   party.quota = QUOTAS[0]
   party.host = players[0]?.id ?? null
   const field = fieldFor(party, 0)
-  for (const m of party.members.values()) send(m.p.ws, { t: 'show', id: party.id, seed: party.seed, at: party.at, round: 0, host: party.host, players, ticket: m.ticket, field })
-  console.log(`Show ${party.id.slice(0, 8)} started with ${players.length} player(s)`)
+  const money = moneyOf(party)
+  for (const m of party.members.values()) if (m.p) send(m.p.ws, { t: 'show', id: party.id, seed: party.seed, at: party.at, round: 0, host: party.host, players, ticket: m.ticket, field, ...money })
+  console.log(`Show ${party.id.slice(0, 8)} started with ${players.length} player(s)${party.staked ? `, pot ${party.pot / 1e9} SOL` : party.freed ? ' (too few staking: free)' : ''}`)
+}
+
+// What's at stake in a show, for the players: the stake, the pot, how it's shared out (of what's left after
+// the fee), and whether it was meant to be staked but turned free
+function moneyOf(party) {
+  if (!party.staked) return { stake: 0, freed: party.freed }
+  const players = [...party.members.values()].filter((m) => m.user).length
+  return { stake: party.stake, pot: party.pot, fee: FEE, split: splitFor(players) }
+}
+
+// The order the staked players came in, as groups of those who came equal (best first): how far into the
+// show each got, then in the final, winning or how long they lasted, and in a round they went out of,
+// whether (and how soon) they finished it
+function standings(party) {
+  const finalRound = QUOTAS.length - 1
+  const keyOf = (m) => {
+    if (m.result) return [m.result.reached, 0, m.result.finish === null ? -1 : 1e6 - m.result.finish]
+    const e = party.round === finalRound ? party.ends.get(`p:${m.id}`) : undefined
+    if (!e) return [party.round, 0, 0]
+    return e.how === 'won' ? [party.round, 2, 0] : [party.round, 1, e.clock]
+  }
+  const keyed = [...party.members.values()].filter((m) => m.user).map((m) => ({ m, key: keyOf(m) }))
+  keyed.sort((a, b) => b.key[0] - a.key[0] || b.key[1] - a.key[1] || b.key[2] - a.key[2])
+  const groups = []
+  for (const k of keyed) {
+    const last = groups[groups.length - 1]
+    if (last && JSON.stringify(last.key) === JSON.stringify(k.key)) last.members.push(k.m)
+    else groups.push({ key: k.key, members: [k.m] })
+  }
+  return groups.map((g) => g.members)
+}
+
+// A staked show's over: the pot paid out, and each player still here told what they won
+async function settle(party) {
+  const ranked = standings(party)
+  const payouts = payoutsFor(
+    party.pot,
+    ranked.map((group) => group.map((m) => m.user)),
+  )
+  try {
+    await stakes.settle(party.id, payouts)
+  } catch (e) {
+    // (Left live: refunded as the server next starts)
+    console.error(`Show ${party.id.slice(0, 8)}: couldn't pay out (${e.message})`)
+    return
+  }
+  for (const group of ranked) {
+    for (const m of group) {
+      const pay = payouts.find((x) => x.user === m.user)
+      if (m.p) send(m.p.ws, { t: 'paid', place: pay?.place ?? null, lamports: pay?.lamports ?? 0, pot: party.pot, players: payouts.length })
+    }
+  }
+  console.log(`Show ${party.id.slice(0, 8)}: paid out ${payouts.filter((x) => x.lamports > 0).map((x) => `${x.place}: ${x.lamports / 1e9}`).join(', ')} SOL`)
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -259,13 +399,18 @@ function decide(party) {
     .slice(0, party.quota)
     .map(([key]) => key)
   const round = party.round
+  const out = [...party.members.values()].filter((m) => m.state === 'in' && !through.includes(`p:${m.id}`))
+  for (const m of out) {
+    const e = party.ends.get(`p:${m.id}`)
+    m.state = 'out'
+    m.result = { reached: round, finish: e?.how === 'finish' ? e.clock : null }
+    release(m)
+  }
   party.round++
   party.at = Date.now() + BREAK
   party.quota = QUOTAS[party.round] ?? null
   party.ends.clear()
   party.decideAt = null
-  const out = [...party.members.values()].filter((m) => m.state === 'in' && !through.includes(`p:${m.id}`))
-  for (const m of out) m.state = 'out'
   broadcast(party.room, { t: 'result', round, through, at: party.at, field: fieldFor(party, party.round) })
   for (const m of out) {
     if (m.p) {
@@ -288,13 +433,18 @@ function finalOver(party) {
 function endShow(party) {
   if (party.over) return
   party.over = true
-  for (const m of party.members.values()) {
-    if (!m.p) continue
-    exit(m.p)
-    m.p.party = null
-  }
-  parties.delete(party.id)
-  console.log(`Show ${party.id.slice(0, 8)} over`)
+  // (Paid out before the players are let go, so those still here hear what they won)
+  const paying = party.staked ? settle(party) : Promise.resolve()
+  void paying.finally(() => {
+    for (const m of party.members.values()) {
+      release(m)
+      if (!m.p) continue
+      exit(m.p)
+      m.p.party = null
+    }
+    parties.delete(party.id)
+    console.log(`Show ${party.id.slice(0, 8)} over`)
+  })
 }
 
 // Back into a show after dropping out of it (a reload, or the connection going), with the ticket it was given
@@ -320,7 +470,7 @@ function rejoin(p, message) {
   member.away = false
   enter(p, party.room)
   const players = [...party.members.values()].filter((m) => m.state === 'in').sort((a, b) => a.id - b.id)
-  send(p.ws, { t: 'rejoined', id: p.id, colour: p.colour, round: party.round, at: party.at, host: party.host, players: players.filter((m) => m !== member && m.p).map(describe), field: fieldFor(party, party.round) })
+  send(p.ws, { t: 'rejoined', id: p.id, colour: p.colour, round: party.round, at: party.at, host: party.host, players: players.filter((m) => m !== member && m.p).map(describe), field: fieldFor(party, party.round), ...moneyOf(party) })
   broadcast(party.room, { t: 'join', player: describe(p) }, p)
   pickHost(party)
   console.log(`${p.name} (#${p.id}) is back in show ${party.id.slice(0, 8)}`)
@@ -337,18 +487,33 @@ function leaveParty(p, forGood) {
   broadcast(party.room, { t: 'leave', id: p.id })
   if (!member || member.p !== p) return
   if (!party.started) {
+    // (While the stakes are being taken: whether this one's was is settled as the show starts)
+    if (party.starting) {
+      member.p = null
+      member.goneAt = Date.now()
+      return
+    }
     party.members.delete(p.id)
-    if (party.members.size === 0) {
+    release(member)
+    if (party.members.size === 0 && !party.starting) {
       parties.delete(party.id)
-      if (open === party) open = null
+      if (open.get(party.tier) === party) open.delete(party.tier)
     }
     return
   }
   member.p = null
   member.goneAt = Date.now()
-  if (forGood) member.state = 'out'
+  if (forGood) out(party, member)
   pickHost(party)
   if (party.quota === null) finalOver(party)
+}
+
+// Out of the show part way (left, or gone too long): it got as far as the round it's in
+function out(party, m) {
+  if (m.state !== 'in') return
+  m.state = 'out'
+  m.result ??= { reached: party.round, finish: null }
+  release(m)
 }
 
 // Every so often: lobbies whose time is up start, rounds close, and those gone too long are out
@@ -356,11 +521,11 @@ setInterval(() => {
   const now = Date.now()
   for (const party of [...parties.values()]) {
     if (!party.started) {
-      if (now >= party.startAt) startShow(party)
+      if (!party.starting && now >= party.startAt) void startShow(party)
       continue
     }
     if (party.over) continue
-    for (const m of party.members.values()) if (m.state === 'in' && !m.p && now - m.goneAt > REJOIN_WITHIN) m.state = 'out'
+    for (const m of party.members.values()) if (m.state === 'in' && !m.p && now - m.goneAt > REJOIN_WITHIN) out(party, m)
     const anyone = [...party.members.values()].some((m) => m.state === 'in')
     if (!anyone) {
       endShow(party)
@@ -401,7 +566,7 @@ wss.on('connection', (ws) => {
         join(p, message)
         break
       case 'queue':
-        queue(p, message)
+        void queue(p, message)
         break
       case 'rejoin':
         rejoin(p, message)
@@ -475,4 +640,6 @@ const heartbeat = setInterval(() => {
 }, HEARTBEAT_MS)
 wss.on('close', () => clearInterval(heartbeat))
 
+// (Shows this server was running before it stopped are gone: their stakes go back)
+await stakes.recover()
 http.listen(PORT, () => console.log(`Fallguy server listening on port ${PORT}`))

@@ -3,11 +3,13 @@ import type { Account } from './auth'
 import { Avatar } from './Avatar'
 import { MODES, type ModeId } from './data'
 import { ChevronDownIcon, CrosshairIcon, FlagIcon, SolanaIcon, WalletIcon } from './icons'
+import { shortAddress, sol, useMoney } from './money'
 
 // The bar along the top: the logo (home), the two modes (each opens its page), and on the right either Sign
-// in and Register or, signed in, your balance (in SOL), Connect Wallet and your profile (which opens the
-// account page). The balance and the wallet aren't wired up yet: both open a "coming soon" note. Nothing
-// shows there until the saved session has been checked, so it doesn't flicker.
+// in and Register or, signed in, your balance (in SOL, on the site: ./money), your wallet (the linked one's
+// address, or Connect Wallet) and your profile (which opens the account page). The balance and the wallet
+// both open the wallet dialog. Nothing shows there until the saved session has been checked, so it doesn't
+// flicker.
 
 const MODE_ICONS: Record<ModeId, ComponentType<{ size?: number }>> = {
   'party-games': FlagIcon,
@@ -27,6 +29,7 @@ type Props = {
 }
 
 export function Navbar({ mode, account, ready, onHome, onMode, onSignIn, onRegister, onWallet, onProfile }: Props) {
+  const money = useMoney()
   return (
     <header className="nav">
       <button className="nav-logo" onClick={onHome}>
@@ -55,14 +58,15 @@ export function Navbar({ mode, account, ready, onHome, onMode, onSignIn, onRegis
       )}
       {ready && account && (
         <div className="nav-right">
-          <button className="nav-balance" onClick={onWallet} aria-label="Balance: $0.00 in SOL">
+          <button className="nav-balance" onClick={onWallet} aria-label={money.me ? `Balance: ${sol(money.me.balance)} SOL` : 'Balance'}>
             <SolanaIcon size={18} />
-            $0.00
+            {money.me ? sol(money.me.balance) : '—'}
+            {money.config && money.config.network !== 'mainnet-beta' && <span className="nav-devnet">devnet</span>}
             <ChevronDownIcon size={16} className="nav-chevron" />
           </button>
           <button className="nav-wallet" onClick={onWallet}>
             <WalletIcon size={18} />
-            <span>Connect Wallet</span>
+            <span>{money.me?.wallet ? shortAddress(money.me.wallet) : 'Connect Wallet'}</span>
           </button>
           <button className="nav-profile" onClick={onProfile} aria-label={`Account settings for ${account.name}`}>
             <Avatar account={account} />

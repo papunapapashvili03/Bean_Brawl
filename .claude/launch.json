@@ -30,6 +30,15 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "game-server-money-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file=server/money-dev.local",
+        "server/index.mjs"
+      ],
+      "port": 2567
     }
   ]
 }

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The house wallet's secret key (server/scripts/house-wallet.mjs): never in git
+server/house-wallet*.json

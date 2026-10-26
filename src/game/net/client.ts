@@ -250,7 +250,14 @@ function receive(text: string) {
       break
     }
     case 'error':
-      net.problem = m.reason === 'room-full' ? 'This server’s full.' : m.reason === 'show-gone' ? 'That show’s over.' : 'The server doesn’t have this room.'
+      net.problem =
+        m.reason === 'room-full'
+          ? 'This server’s full.'
+          : m.reason === 'show-gone'
+            ? 'That show’s over.'
+            : m.reason === 'stake'
+              ? String(m.message)
+              : 'The server doesn’t have this room.'
       hello = null
       socket?.close()
       net.status = 'offline'

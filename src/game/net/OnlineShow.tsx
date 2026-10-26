@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { RaceHud, type ShowHud } from '../race/RaceHud'
 import { COUNTDOWN_SECONDS, eliminate, getRaceView, playerFinishClock, raceClock, racers, type RaceView } from '../race/race'
 import { recordGame, whileLeaving, type Outcome } from '../record'
+import { sol } from '../../landing/money'
 import { OFFLINE_SHOW_URL, ONLINE_SHOW_URL, nextOnlineRound, type Show } from '../show'
 import { net, serverNow, useNet } from './client'
 import { leaveParty, party, showOver, tellDone, useParty } from './party'
@@ -13,6 +14,9 @@ import { leaveParty, party, showOver, tellDone, useParty } from './party'
 // show. And before all that, the lobby (PartyLobby): who's waiting, and how long till the show starts.
 
 const LOAD_LEAD = 2000 // ms before the next round's clock starts that it's put on the screen
+const FREED_FOR = 10_000 // ms the "this show's free" note shows
+// (Trying it out against the game server on this computer: the next page uses it too)
+const local = (url: string) => (new URLSearchParams(window.location.search).get('mp') === 'local' ? `${url}&mp=local` : url)
 const NO_ANSWER = 8000 // ms connected without a lobby before it's taken that the server can't run shows
 
 type Stage = 'playing' | 'break' | 'out' | 'won'
@@ -46,6 +50,14 @@ export function OnlineShowDirector({
   const [left, setLeft] = useState(0)
   const [upcoming, setUpcoming] = useState<{ show: Show; at: number } | null>(null)
   const [outAt, setOutAt] = useState<{ place: number; of: number } | null>(null) // where you were when you went out
+  const { money, paid } = useParty()
+  // (Meant to be staked, but too few staked: said once, as the show starts)
+  const [freedNote, setFreedNote] = useState(show.round === 0 && !!money?.freed)
+  useEffect(() => {
+    if (!freedNote) return
+    const t = window.setTimeout(() => setFreedNote(false), FREED_FOR)
+    return () => window.clearTimeout(t)
+  }, [freedNote])
 
   useEffect(() => {
     if (stage !== 'playing') return
@@ -120,19 +132,23 @@ export function OnlineShowDirector({
   }, [stage, upcoming, onRound])
 
   const again = [
-    { label: 'Play again', onClick: () => window.location.assign(ONLINE_SHOW_URL), primary: true },
+    { label: 'Play again', onClick: () => window.location.assign(local(ONLINE_SHOW_URL)), primary: true },
     { label: 'Lobby', onClick: onLobby },
   ]
+  // What I won, once the show's paid out (staked); or, out before then, that it's still to come
+  const staked = !!money?.stake
+  const won = paid && paid.lamports > 0 ? ` · +${sol(paid.lamports)} SOL` : ''
+  const winnings = staked ? (paid ? (paid.lamports > 0 ? ` · +${sol(paid.lamports)} SOL for ${ordinal(paid.place ?? 1)}` : '') : ' · any winnings reach your balance as the show ends') : ''
   const roundName = quota === null ? 'Final' : `Round ${show.round + 1} of ${last}`
   const players = (show.humans?.length ?? 1) + show.bots.length
   const hud: ShowHud =
     stage === 'won'
-      ? { label: 'Final', finishNote: 'You won the show!', crown: true, actions: again }
+      ? { label: 'Final', finishNote: `You won the show!${staked ? won || ' · paying out…' : ''}`, crown: true, actions: again }
       : stage === 'out'
         ? {
             label: roundName,
             finishTitle: 'Not through',
-            outNote: `Out in ${quota === null ? 'the final' : `round ${show.round + 1} of ${last}`}${outAt ? ` · ${ordinal(outAt.place)} of ${outAt.of}` : ''}`,
+            outNote: `Out in ${quota === null ? 'the final' : `round ${show.round + 1} of ${last}`}${outAt ? ` · ${ordinal(outAt.place)} of ${outAt.of}` : ''}${winnings}`,
             actions: again,
           }
         : quota === null
@@ -142,7 +158,12 @@ export function OnlineShowDirector({
   const nextRoundInfo = upcoming ? upcoming.show.rounds[upcoming.show.round] : null
   return (
     <>
-      <RaceHud onRestart={() => window.location.assign(ONLINE_SHOW_URL)} show={hud} />
+      <RaceHud onRestart={() => window.location.assign(local(ONLINE_SHOW_URL))} show={hud} />
+      {freedNote && (
+        <div className="party-notice" role="status">
+          Too few players staked, so this show’s free: nothing was taken from your balance.
+        </div>
+      )}
       {stage === 'break' && upcoming && nextRoundInfo && (
         <div className="show-break" role="status" aria-live="polite">
           <div className="show-break-card">
@@ -164,7 +185,7 @@ export function OnlineShowDirector({
 // Waiting for the show: joining, then the lobby filling up (or what's wrong)
 
 export function PartyLobby({ onLobby }: { onLobby: () => void }) {
-  const { phase, startAt, max, problem } = useParty()
+  const { phase, startAt, max, problem, stake, staking } = useParty()
   const { players, status, ping, problem: netProblem } = useNet()
   const reached = ping !== null // (the server's answered)
   const [now, setNow] = useState(() => serverNow())
@@ -197,16 +218,16 @@ export function PartyLobby({ onLobby }: { onLobby: () => void }) {
         {failed || unreachable ? (
           <>
             <div id="party-lobby-title" className="show-break-kicker party-problem">
-              {failed ? 'Show over' : status === 'offline' ? 'Can’t reach the server' : 'The server isn’t starting shows'}
+              {failed ? (staking ? 'Can’t play for the stake' : 'Show over') : status === 'offline' ? 'Can’t reach the server' : 'The server isn’t starting shows'}
             </div>
             <div className="show-break-note">{failed ? problem : status !== 'offline' ? 'It may need updating.' : (netProblem ?? 'Trying again…')}</div>
             <div className="party-actions">
               {failed ? (
-                <button className="party-primary" onClick={() => window.location.assign(ONLINE_SHOW_URL)}>
-                  Find another show
+                <button className="party-primary" onClick={() => window.location.assign(local(ONLINE_SHOW_URL))}>
+                  {staking ? 'Play a free show instead' : 'Find another show'}
                 </button>
               ) : (
-                <button className="party-primary" onClick={() => window.location.assign(OFFLINE_SHOW_URL)}>
+                <button className="party-primary" onClick={() => window.location.assign(local(OFFLINE_SHOW_URL))}>
                   Play with bots instead
                 </button>
               )}
@@ -222,7 +243,9 @@ export function PartyLobby({ onLobby }: { onLobby: () => void }) {
               {players.length + 1}
               <span className="party-of"> / {max}</span>
             </div>
-            <div className="show-break-note">The rest of the field will be bots</div>
+            <div className="show-break-note">
+              {stake ? `Stake ${sol(stake, 2)} SOL each · pot so far ${sol(stake * (players.length + 1))} SOL` : 'The rest of the field will be bots'}
+            </div>
             <ul className="party-players">
               <li>
                 <span className="net-swatch" style={{ background: '#ff6b35' }} />

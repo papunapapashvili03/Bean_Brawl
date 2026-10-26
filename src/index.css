@@ -804,6 +804,24 @@ html, body, #root {
   background: #74e07f;
 }
 
+/* A note over the show, for a moment (e.g. that it's being played free) */
+.party-notice {
+  position: absolute;
+  top: 132px;
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(20, 16, 40, 0.82);
+  color: #ffd27a;
+  font: 700 14px system-ui, sans-serif;
+  text-align: center;
+}
+
 /* Online play (the playground): status, who's here, and names over other players' beans */
 .net-hud {
   position: absolute;

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { accessToken } from '../../landing/money'
 import { difficultyFor, setField, type Field } from '../bots/difficulty'
 import { currentOutfit } from '../outfit'
 import type { Racer } from '../race/race'
@@ -20,16 +21,28 @@ import { connect, heard, myName, net, onMessage, send, serverNow } from './clien
 //
 // Dropping out (a reload, or the connection going), a player comes back in where it was, if it can: with the
 // ticket it was given, kept for the tab.
+//
+// A show can be played for a stake (&stake=<tier> on the address: see server/wallet.mjs): the player queues
+// signed in (with its sign-in token, for the server to check its balance), in that tier's own lobby. As the
+// show starts the server takes the stakes (or, with fewer than two staking, plays it free: `freed`), and when
+// it's over, tells each player what they won from the pot.
 
 export type PartyPhase = 'idle' | 'connecting' | 'lobby' | 'show' | 'failed'
 export type Result = { round: number; through: string[]; at: number }
+// What's at stake in the show (lamports): each player's stake and the pot, the site's fee and how the rest's
+// shared out by place; or, meant to be staked, played free (too few staking)
+export type Money = { stake: number; pot: number; fee: number; split: number[]; freed: boolean }
+export type Paid = { place: number | null; lamports: number; pot: number; players: number }
+
+// The stake tier this page plays for (0: free)
+export const STAKE = Math.max(0, Math.floor(Number(new URLSearchParams(window.location.search).get('stake')) || 0))
 type How = 'finish' | 'out' | 'won'
 
 const KEY = 'fallguy.party' // { show, ticket }: the show this tab is in, to come back to after a reload
 
 export const party = {
   phase: 'idle' as PartyPhase,
-  lobby: null as { id: string; seed: number; startAt: number; max: number } | null,
+  lobby: null as { id: string; seed: number; startAt: number; max: number; stake: number } | null,
   show: null as Show | null, // the show, once it's started (made here; the director moves it on)
   ticket: null as string | null,
   host: null as number | null, // who runs the bots
@@ -37,11 +50,27 @@ export const party = {
   at: 0, // when its clock starts, by the server's clock
   result: null as Result | null, // the last round decided
   problem: null as string | null,
+  staking: false, // the problem's with staking (the show could be played free instead)
   stayedAsHost: null as boolean | null, // knocked out but the round left on the screen: whether I ran the bots
+  money: null as Money | null,
+  paid: null as Paid | null, // what I won, once the show's paid out
 }
 
-type View = { phase: PartyPhase; seed: number | null; startAt: number | null; max: number; host: number | null; show: Show | null; result: Result | null; problem: string | null }
-let view: View = { phase: 'idle', seed: null, startAt: null, max: 10, host: null, show: null, result: null, problem: null }
+type View = {
+  phase: PartyPhase
+  seed: number | null
+  startAt: number | null
+  max: number
+  stake: number // the lobby's (lamports)
+  host: number | null
+  show: Show | null
+  result: Result | null
+  problem: string | null
+  staking: boolean
+  money: Money | null
+  paid: Paid | null
+}
+let view: View = { phase: 'idle', seed: null, startAt: null, max: 10, stake: 0, host: null, show: null, result: null, problem: null, staking: false, money: null, paid: null }
 const listeners = new Set<() => void>()
 function changed() {
   view = {
@@ -49,10 +78,14 @@ function changed() {
     seed: party.lobby?.seed ?? null,
     startAt: party.lobby?.startAt ?? null,
     max: party.lobby?.max ?? 10,
+    stake: party.lobby?.stake ?? 0,
     host: party.host,
     show: party.show,
     result: party.result,
     problem: party.problem,
+    staking: party.staking,
+    money: party.money,
+    paid: party.paid,
   }
   listeners.forEach((l) => l())
 }
@@ -249,23 +282,42 @@ export function joinParty() {
   if (!back) endShow()
   party.phase = 'connecting'
   party.problem = null
+  party.staking = false
   changed()
-  unhear = onMessage(hear)
-  stop = connect(() => {
-    // (Back into the show it's in, coming back after the connection went; or after a reload)
-    if (party.show && party.ticket) return { t: 'rejoin', show: party.show.id, ticket: party.ticket }
-    if (back && party.phase === 'connecting') return { t: 'rejoin', show: back.show, ticket: back.ticket }
-    if (party.phase === 'failed') return null
-    return { t: 'queue', name: myName(), outfit: currentOutfit(), skill: { q: three(difficultyFor('party-games', 'qualifier')), f: three(difficultyFor('party-games', 'final')) } }
-  })
-  const quit = stop
+  let cancelled = false
+  let quit: (() => void) | null = null
+  const begin = (token: string | null) => {
+    if (cancelled) return
+    unhear = onMessage(hear)
+    stop = quit = connect(() => {
+      // (Back into the show it's in, coming back after the connection went; or after a reload)
+      if (party.show && party.ticket) return { t: 'rejoin', show: party.show.id, ticket: party.ticket }
+      if (back && party.phase === 'connecting') return { t: 'rejoin', show: back.show, ticket: back.ticket }
+      if (party.phase === 'failed') return null
+      const skill = { q: three(difficultyFor('party-games', 'qualifier')), f: three(difficultyFor('party-games', 'final')) }
+      return { t: 'queue', name: myName(), outfit: currentOutfit(), skill, ...(STAKE ? { stake: STAKE, token } : {}) }
+    })
+  }
+  // (Staking, the server checks who it is: the sign-in's token goes with the queue)
+  if (STAKE && !back) {
+    void accessToken()
+      .then(begin)
+      .catch(() => begin(null))
+  } else begin(null)
   return () => {
+    cancelled = true
     unhear?.()
     unhear = null
-    quit()
+    quit?.()
     if (stop === quit) stop = null
     party.phase = 'idle'
   }
+}
+
+// What's at stake, as the server says as the show starts (or as I come back to it)
+function moneyOf(m: Record<string, unknown>): Money | null {
+  if (typeof m.stake !== 'number') return null
+  return { stake: m.stake, pot: (m.pot as number) ?? 0, fee: (m.fee as number) ?? 0, split: (m.split as number[]) ?? [], freed: !!m.freed }
 }
 
 function fail(problem: string) {
@@ -279,7 +331,7 @@ function hear(m: Record<string, unknown> & { t: string }) {
   switch (m.t) {
     case 'lobby':
       party.phase = 'lobby'
-      party.lobby = { id: m.id as string, seed: m.seed as number, startAt: m.startAt as number, max: m.max as number }
+      party.lobby = { id: m.id as string, seed: m.seed as number, startAt: m.startAt as number, max: m.max as number, stake: (m.stake as number) ?? 0 }
       changed()
       break
     case 'starts':
@@ -291,6 +343,7 @@ function hear(m: Record<string, unknown> & { t: string }) {
       const show = startOnlineShow(m.id as string, m.seed as number, humans, seeded(m.seed as number))
       party.ticket = m.ticket as string
       party.host = m.host as number
+      party.money = moneyOf(m)
       heardField(0, m.field)
       keep(show.id, party.ticket)
       party.phase = 'show'
@@ -299,6 +352,7 @@ function hear(m: Record<string, unknown> & { t: string }) {
     }
     case 'rejoined': {
       party.host = m.host as number
+      party.money = moneyOf(m)
       heardField(m.round as number, m.field)
       away = false
       if (party.show) {
@@ -352,7 +406,16 @@ function hear(m: Record<string, unknown> & { t: string }) {
       if (party.phase === 'lobby') party.phase = 'connecting'
       changed()
       break
+    case 'paid':
+      party.paid = { place: (m.place as number | null) ?? null, lamports: m.lamports as number, pot: m.pot as number, players: m.players as number }
+      changed()
+      break
     case 'error':
+      if (m.reason === 'stake') {
+        party.staking = true
+        fail(String(m.message))
+        break
+      }
       if (m.reason !== 'show-gone') break
       if (party.show) {
         fail('That show’s over.')

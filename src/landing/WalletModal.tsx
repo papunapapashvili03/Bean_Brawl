@@ -1,23 +1,26 @@
-import { WalletIcon } from './icons'
+import { Suspense, lazy } from 'react'
 import { Modal } from './Modal'
 
-// What the wallet button shows for now
+// The wallet dialog (the balance and Connect Wallet buttons): your SOL on the site, and your Solana wallet.
+// Its insides (./WalletPanel) come with the Solana libraries, so they're loaded the first time it's opened.
 
-export function WalletModal({ onClose }: { onClose: () => void }) {
+const WalletPanel = lazy(() => import('./WalletPanel'))
+
+export function WalletModal({ onClose, onSignIn, onRegister }: { onClose: () => void; onSignIn: () => void; onRegister: () => void }) {
   return (
-    <Modal onClose={onClose} labelledBy="wallet-title" className="notice-modal">
-      <div className="notice-icon">
-        <WalletIcon size={26} />
-      </div>
-      <h2 id="wallet-title" className="notice-title">
-        Coming soon!
-      </h2>
-      <p className="notice-text">
-        We are testing game engagement. Thanks for your support <span className="notice-heart">❤︎</span>
-      </p>
-      <button className="auth-submit" onClick={onClose}>
-        Got it
-      </button>
+    <Modal onClose={onClose} labelledBy="wallet-title" className="wallet-modal">
+      <Suspense fallback={<p className="wallet-note">Loading the wallet…</p>}>
+        <WalletPanel
+          onSignIn={() => {
+            onClose()
+            onSignIn()
+          }}
+          onRegister={() => {
+            onClose()
+            onRegister()
+          }}
+        />
+      </Suspense>
     </Modal>
   )
 }
